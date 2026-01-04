@@ -1,0 +1,1 @@
+"use strict";(self["webpackChunkvue_antd_pro"]=self["webpackChunkvue_antd_pro"]||[]).push([[910],{40910:function(u,n,e){e.r(n),e.d(n,{default:function(){return c}});var r=function(){var u=this,n=u._self._c;return n("router-view")},t=[],l=e(1001),s={},a=(0,l.Z)(s,r,t,!1,null,null,null),c=a.exports}}]);
