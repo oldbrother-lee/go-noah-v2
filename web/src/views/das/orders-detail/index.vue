@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useDebounceFn } from '@vueuse/core';
+import { useDebounceFn, useThrottleFn } from '@vueuse/core';
 import {
   NButton,
   NDataTable,
@@ -37,6 +37,7 @@ import {
 } from '@/service/api/orders';
 import { useThemeStore } from '@/store/modules/theme';
 import { useAuthStore } from '@/store/modules/auth';
+import { useAppStore } from '@/store/modules/app';
 import ReadonlySqlEditor from '@/components/custom/readonly-sql-editor.vue';
 import LogViewer from '@/components/custom/log-viewer.vue';
 
@@ -46,6 +47,7 @@ const message = useMessage();
 const dialog = useDialog();
 const themeStore = useThemeStore();
 const authStore = useAuthStore();
+const appStore = useAppStore();
 
 const showProgress = ref(false); // 默认收起工单进度
 
@@ -258,26 +260,77 @@ const currentStepStatus = computed(() => {
 // OSC Progress
 const oscContent = ref('');
 const websocket = ref<WebSocket | null>(null);
+const reconnectAttempts = ref(0);
+const maxReconnectAttempts = 10; // 最大重连次数
+const reconnectDelay = 3000; // 重连延迟（毫秒）
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 性能优化：日志内容限制
+const MAX_LOG_LENGTH = 10 * 1024 * 1024; // 最大日志长度：10MB
+const MAX_LOG_LINES = 50000; // 最大日志行数：50000行
+const TRIM_LOG_LENGTH = 5 * 1024 * 1024; // 当超过最大长度时，保留前5MB
+
+// 日志缓冲区（用于批量更新，减少DOM操作）
+const logBuffer = ref<string[]>([]);
+const isUpdatingLog = ref(false);
+
+// 检查工单是否还在执行中
+const isOrderExecuting = computed(() => {
+  const status = orderDetail.value?.progress;
+  return status && ['执行中', '已批准'].includes(status);
+});
 
 const initWebSocket = () => {
-  if (websocket.value) return;
+  // 如果已经连接，不重复连接
+  if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
+    return;
+  }
+
+  // 如果工单不在执行中，且不是重连尝试，不建立连接
+  if (!isOrderExecuting.value && reconnectAttempts.value === 0) {
+    return;
+  }
+  
+  // 如果是重连尝试，但工单状态已改变，停止重连
+  if (reconnectAttempts.value > 0 && !isOrderExecuting.value) {
+    reconnectAttempts.value = 0;
+    return;
+  }
 
   const orderId = route.params.id as string;
+  if (!orderId) return;
 
   let wsUrl = '';
   const isDev = import.meta.env.DEV;
   const serviceBaseUrl = import.meta.env.VITE_SERVICE_BASE_URL;
 
   if (isDev && serviceBaseUrl) {
-    // Replace http with ws, https with wss
-    wsUrl = `${serviceBaseUrl.replace(/^http/, 'ws')}/ws/${orderId}`;
+    // 开发环境：使用配置的 baseURL，确保 WebSocket 也走代理
+    // 如果 baseURL 是 http://localhost:8000，则转换为 ws://localhost:8000
+    // 如果 baseURL 是 https://xxx.com，则转换为 wss://xxx.com
+    const wsBaseUrl = serviceBaseUrl.replace(/^http/, 'ws');
+    wsUrl = `${wsBaseUrl}/ws/${orderId}`;
   } else {
+    // 生产环境：使用当前页面的协议和主机
+    // 注意：如果使用了反向代理（如 Nginx），可能需要使用完整的服务地址
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const host = window.location.host;
-    wsUrl = `${protocol}${host}/ws/${orderId}`;
+    
+    // 如果配置了 serviceBaseUrl，优先使用它（生产环境也可能配置）
+    if (serviceBaseUrl && !serviceBaseUrl.includes('localhost')) {
+      const wsBaseUrl = serviceBaseUrl.replace(/^http/, 'ws');
+      wsUrl = `${wsBaseUrl}/ws/${orderId}`;
+    } else {
+      wsUrl = `${protocol}${host}/ws/${orderId}`;
+    }
   }
-
-  websocket.value = new WebSocket(wsUrl);
+  
+  try {
+    websocket.value = new WebSocket(wsUrl);
+  } catch (error) {
+    message.error('WebSocket 连接创建失败，请检查网络连接');
+    return;
+  }
 
   // Debounce task refresh to avoid flooding the server
   const debouncedRefresh = useDebounceFn(() => {
@@ -285,60 +338,184 @@ const initWebSocket = () => {
   }, 1000);
 
   websocket.value.onopen = () => {
-    console.log('WebSocket connected');
+    reconnectAttempts.value = 0; // 重置重连次数
+    
+    // 连接成功后，先恢复历史日志（如果为空）
+    // 但不要覆盖已有的实时日志
+    if (!oscContent.value) {
+      restoreHistoryLogs();
+    }
   };
+
+  // 节流更新日志内容（每200ms最多更新一次，减少DOM操作）
+  const throttledUpdateLog = useThrottleFn(() => {
+    if (logBuffer.value.length === 0) return;
+    
+    isUpdatingLog.value = true;
+    try {
+      // 批量追加日志
+      const newLogs = logBuffer.value.join('');
+      const logCount = logBuffer.value.length;
+      logBuffer.value = []; // 清空缓冲区
+      
+      // 追加新日志
+      oscContent.value += newLogs;
+      
+      // 检查并限制日志长度
+      trimLogIfNeeded();
+    } finally {
+      isUpdatingLog.value = false;
+    }
+  }, 200);
 
   websocket.value.onmessage = event => {
     try {
       const result = JSON.parse(event.data);
+      let logText = '';
+      
       if (result.type === 'processlist') {
         // Format processlist data
-        let html = '当前SQL SESSION ID的SHOW PROCESSLIST输出:\n';
+        logText = '当前SQL SESSION ID的SHOW PROCESSLIST输出:\n';
         for (const key in result.data) {
-          html += `${key}: ${result.data[key]}\n`;
+          logText += `${key}: ${result.data[key]}\n`;
         }
-        oscContent.value = html;
+        // processlist 类型替换整个内容
+        oscContent.value = logText;
+        logBuffer.value = []; // 清空缓冲区
       } else if (result.type === 'ghost') {
         // Append ghost logs
-        oscContent.value += result.data;
+        logText = result.data;
+        logBuffer.value.push(logText);
+        throttledUpdateLog();
       } else {
-        // Append content
-        oscContent.value += `${result.data}\n`;
+        // Append content (默认类型)
+        logText = `${result.data}\n`;
+        logBuffer.value.push(logText);
+        throttledUpdateLog();
       }
-      // Auto refresh tasks on any message
+      
+      // Auto refresh tasks on any message (防抖处理)
       debouncedRefresh();
     } catch (e) {
-      console.error('WebSocket message parse error:', e);
-      oscContent.value += `${event.data}\n`;
+      // 解析失败时，直接追加原始数据
+      const logText = `${event.data}\n`;
+      logBuffer.value.push(logText);
+      throttledUpdateLog();
       // Auto refresh tasks even on parse error as it implies activity
       debouncedRefresh();
     }
   };
 
   websocket.value.onerror = error => {
-    console.error('WebSocket error:', error);
-    // Reconnect after 3s
-    setTimeout(() => {
-      websocket.value = null;
-      initWebSocket();
-    }, 3000);
+    // 错误时会在 onclose 中处理重连
   };
 
-  websocket.value.onclose = () => {
-    console.log('WebSocket closed');
+  websocket.value.onclose = event => {
     websocket.value = null;
+
+    // 检查工单状态（重新获取最新状态，避免状态不同步）
+    const currentStatus = orderDetail.value?.progress;
+    const shouldReconnect = currentStatus && ['执行中', '已批准'].includes(currentStatus);
+    
+    if (shouldReconnect && reconnectAttempts.value < maxReconnectAttempts) {
+      reconnectAttempts.value++;
+      
+      reconnectTimer = setTimeout(() => {
+        // 重连前再次检查工单状态
+        if (orderDetail.value?.progress && ['执行中', '已批准'].includes(orderDetail.value.progress)) {
+          initWebSocket();
+        } else {
+          reconnectAttempts.value = 0; // 重置重连次数
+        }
+      }, reconnectDelay);
+    } else if (reconnectAttempts.value >= maxReconnectAttempts) {
+      message.warning('WebSocket 连接失败，已停止自动重连。请刷新页面重试。');
+    } else if (!shouldReconnect) {
+      reconnectAttempts.value = 0; // 重置重连次数
+    }
   };
 };
 
+// 从任务列表中恢复历史日志
+const restoreHistoryLogs = async () => {
+  if (oscContent.value) return; // 如果已有日志，不恢复
+
+  const orderId = route.params.id as string;
+  if (!orderId) return;
+
+  try {
+    const { data } = await fetchTasks({ order_id: orderId });
+    if (data && data.length > 0) {
+      let historyLogs = '';
+      data.forEach((task: any) => {
+        if (task.result) {
+          try {
+            // result 可能是字符串也可能是对象
+            const resultObj = typeof task.result === 'string' ? JSON.parse(task.result) : task.result;
+            if (resultObj && resultObj.execute_log) {
+              // 添加任务标识，以便区分不同任务的日志
+              if (data.length > 1) {
+                historyLogs += `\n--- Task ${task.task_id} ---\n`;
+              }
+              historyLogs += `${resultObj.execute_log}\n`;
+            }
+          } catch (e) {
+            // 解析失败，跳过该任务
+          }
+        }
+      });
+      if (historyLogs) {
+        oscContent.value = historyLogs;
+      }
+    }
+  } catch (error) {
+    // 恢复历史日志失败，忽略错误
+  }
+};
+
+// 限制日志长度，防止内存泄漏
+const trimLogIfNeeded = () => {
+  const content = oscContent.value;
+  
+  // 检查长度限制
+  if (content.length > MAX_LOG_LENGTH) {
+    // 计算需要保留的行数（大约保留前5MB）
+    const lines = content.split('\n');
+    if (lines.length > MAX_LOG_LINES) {
+      // 保留最新的日志（后50%）
+      const keepLines = Math.floor(MAX_LOG_LINES / 2);
+      const trimmedLines = lines.slice(-keepLines);
+      oscContent.value = `[日志已自动清理，保留最新 ${keepLines} 行]\n${trimmedLines.join('\n')}`;
+    } else {
+      // 按字节数截断，保留最新的内容
+      const trimmed = content.slice(-TRIM_LOG_LENGTH);
+      oscContent.value = `[日志已自动清理，保留最新内容]\n${trimmed}`;
+    }
+  }
+};
+
 const closeWebSocket = () => {
+  // 清除重连定时器
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  
   if (websocket.value) {
     websocket.value.close();
     websocket.value = null;
   }
+  
+  reconnectAttempts.value = 0; // 重置重连次数
+  logBuffer.value = []; // 清空日志缓冲区
 };
 
 onUnmounted(() => {
   closeWebSocket();
+  // 清理日志缓冲区
+  logBuffer.value = [];
+  // 清理日志内容（可选，如果不想保留）
+  // oscContent.value = '';
 });
 
 // 任务进度统计
@@ -669,6 +846,7 @@ const getTasks = async (force = false) => {
       tasksList.value = data;
 
       // 如果 oscContent 为空且有任务数据，尝试从任务结果中恢复日志
+      // 注意：这个逻辑已经移到 restoreHistoryLogs 函数中，但保留作为备用
       if (!oscContent.value && data.length > 0) {
         let historyLogs = '';
         data.forEach((task: any) => {
@@ -757,9 +935,26 @@ onMounted(async () => {
   await getOrderDetail();
   getOpLogs();
   // getTaskPreview();
-  getTasks();
+  await getTasks();
+  // 如果工单在执行中，建立 WebSocket 连接
+  // 注意：initWebSocket 内部会检查工单状态
   initWebSocket();
 });
+
+// 监听工单状态变化，如果从非执行状态变为执行状态，建立连接
+watch(
+  () => orderDetail.value?.progress,
+  (newStatus, oldStatus) => {
+    // 如果工单状态变为执行中，且之前没有连接，则建立连接
+    if (newStatus === '执行中' && oldStatus !== '执行中' && !websocket.value) {
+      initWebSocket();
+    }
+    // 如果工单状态变为非执行状态，关闭连接
+    if (newStatus && !['执行中', '已批准'].includes(newStatus) && websocket.value) {
+      closeWebSocket();
+    }
+  }
+);
 // SQL编辑器事件处理
 const handleSqlPageChange = (page: number) => {
   console.log('SQL页码变化:', page);
@@ -1002,67 +1197,67 @@ const submitHook = async () => {
         <!-- 新的顶部布局 -->
         <div class="order-header-container">
           <!-- 顶部标题栏 -->
-          <div class="mb-4 flex items-center justify-between">
+          <div class="mb-4 flex flex-col gap-3" :class="appStore.isMobile ? '' : 'items-center justify-between flex-row'">
             <div class="flex items-center gap-2">
               <NButton text class="mr-2" @click="router.back()">
                 <template #icon>
                   <div class="i-ic:round-arrow-back text-xl" />
                 </template>
               </NButton>
-              <h1 class="m-0 text-2xl font-bold">{{ orderDetail?.title?.split('_')[0] || '工单详情' }}</h1>
+              <h1 class="m-0 text-2xl font-bold" :class="appStore.isMobile ? 'text-lg' : ''">{{ orderDetail?.title || '工单详情' }}</h1>
               <NTag type="primary" size="small" bordered>#{{ orderDetail?.order_id }}</NTag>
             </div>
-            <div class="flex gap-2">
-              <NButton type="primary" ghost size="small" :loading="refreshLoading" @click="handleRefresh">
+            <div class="flex gap-2 flex-wrap">
+              <NButton type="primary" ghost :size="appStore.isMobile ? 'tiny' : 'small'" :loading="refreshLoading" @click="handleRefresh">
                 <template #icon>
                   <div class="i-ic:round-refresh" />
                 </template>
-                刷新
+                <span v-if="!appStore.isMobile">刷新</span>
               </NButton>
               <!-- 操作按钮组 -->
               <NButton
                 v-if="actionType !== 'none'"
                 type="primary"
-                size="small"
+                :size="appStore.isMobile ? 'tiny' : 'small'"
                 :disabled="actionDisabled"
                 @click="showActionModal"
               >
                 {{ actionTitle }}
               </NButton>
 
-              <NButton v-if="orderDetail?.progress === '已复核'" type="info" size="small" @click="handleHook">
+              <NButton v-if="orderDetail?.progress === '已复核'" type="info" :size="appStore.isMobile ? 'tiny' : 'small'" @click="handleHook">
                 <template #icon>
                   <div class="i-ant-design:link-outlined" />
                 </template>
-                Hook
+                <span v-if="!appStore.isMobile">Hook</span>
               </NButton>
 
-              <NButton type="error" ghost size="small" :disabled="closeDisabled" @click="showCloseModal">
+              <NButton type="error" ghost :size="appStore.isMobile ? 'tiny' : 'small'" :disabled="closeDisabled" @click="showCloseModal">
                 <template #icon>
                   <div class="i-ant-design:close-circle-outlined" />
                 </template>
-                关闭工单
+                <span v-if="!appStore.isMobile">关闭工单</span>
               </NButton>
 
               <NButton
                 v-if="showGenerateBtn"
                 type="warning"
                 ghost
-                size="small"
+                :size="appStore.isMobile ? 'tiny' : 'small'"
                 :loading="executeLoading"
                 @click="handleGenerateTasks"
               >
                 <template #icon>
                   <div class="i-ant-design:thunderbolt-outlined" />
                 </template>
-                生成任务
+                <span v-if="!appStore.isMobile">生成任务</span>
               </NButton>
 
               <NButton
                 v-if="showExecuteAllBtn"
                 type="success"
                 ghost
-                size="small"
+                :size="appStore.isMobile ? 'tiny' : 'small'"
                 :loading="executeLoading"
                 :disabled="!!orderDetail?.schedule_time"
                 @click="handleExecuteAll"
@@ -1070,16 +1265,16 @@ const submitHook = async () => {
                 <template #icon>
                   <div class="i-ant-design:thunderbolt-filled" />
                 </template>
-                执行全部
+                <span v-if="!appStore.isMobile">执行全部</span>
               </NButton>
             </div>
           </div>
 
           <!-- 工单基本信息区域 -->
           <div class="order-info-section">
-            <div class="flex gap-6">
+            <div class="flex flex-col gap-4" :class="appStore.isMobile ? '' : 'flex-row gap-6'">
               <!-- 左侧信息列表 -->
-              <div class="grid grid-cols-3 flex-1 gap-x-8 gap-y-4 text-sm">
+              <div class="grid flex-1 gap-x-8 gap-y-4 text-sm" :class="appStore.isMobile ? 'grid-cols-1' : 'grid-cols-3'">
                 <div class="info-item">
                   <span class="label">申请人：</span>
                   <span class="value font-medium">{{ orderDetail?.applicant }}</span>
@@ -1141,7 +1336,8 @@ const submitHook = async () => {
 
               <!-- 右侧状态展示 -->
               <div
-                class="status-display-section min-w-[160px] flex flex-col items-center justify-center border-l border-gray-100 px-8 dark:border-gray-800"
+                class="status-display-section flex flex-col items-center justify-center px-8 dark:border-gray-800"
+                :class="appStore.isMobile ? 'border-t border-gray-100 pt-4 mt-4 min-w-full' : 'min-w-[160px] border-l border-gray-100'"
               >
                 <div class="sci-fi-status-container" :class="getStatusType">
                   <div class="status-label-mini">CURRENT STATUS</div>
@@ -1235,7 +1431,7 @@ const submitHook = async () => {
         </NCard>
 
         <!-- 中间区域：两栏布局 -->
-        <div class="middle-content-container">
+        <div class="middle-content-container" :class="appStore.isMobile ? 'mobile-layout' : ''">
           <!-- 左侧：进度信息 -->
           <div class="progress-section">
             <!-- 进度信息 -->
@@ -1248,13 +1444,13 @@ const submitHook = async () => {
                 <div v-if="taskStats" class="progress-item">
                   <span class="progress-label">任务进度：</span>
                   <div class="task-stats">
-                    <NSpace size="small">
-                      <NTag :bordered="false" type="primary" size="small">任务数: {{ taskStats.total }}</NTag>
-                      <NTag :bordered="false" type="success" size="small">成功数: {{ taskStats.completed }}</NTag>
-                      <NTag :bordered="false" type="default" size="small">未执行: {{ taskStats.unexecuted }}</NTag>
-                      <NTag :bordered="false" type="error" size="small">已失败: {{ taskStats.failed }}</NTag>
-                      <NTag :bordered="false" type="info" size="small">执行中: {{ taskStats.processing }}</NTag>
-                      <NTag :bordered="false" type="warning" size="small">已暂停: {{ taskStats.paused }}</NTag>
+                    <NSpace :size="appStore.isMobile ? 'small' : 'small'" :wrap="appStore.isMobile">
+                      <NTag :bordered="false" type="primary" :size="appStore.isMobile ? 'tiny' : 'small'">任务数: {{ taskStats.total }}</NTag>
+                      <NTag :bordered="false" type="success" :size="appStore.isMobile ? 'tiny' : 'small'">成功数: {{ taskStats.completed }}</NTag>
+                      <NTag :bordered="false" type="default" :size="appStore.isMobile ? 'tiny' : 'small'">未执行: {{ taskStats.unexecuted }}</NTag>
+                      <NTag :bordered="false" type="error" :size="appStore.isMobile ? 'tiny' : 'small'">已失败: {{ taskStats.failed }}</NTag>
+                      <NTag :bordered="false" type="info" :size="appStore.isMobile ? 'tiny' : 'small'">执行中: {{ taskStats.processing }}</NTag>
+                      <NTag :bordered="false" type="warning" :size="appStore.isMobile ? 'tiny' : 'small'">已暂停: {{ taskStats.paused }}</NTag>
                     </NSpace>
                   </div>
                 </div>
@@ -1280,10 +1476,18 @@ const submitHook = async () => {
             <NCard size="small" class="mb-16px">
               <NTabs v-model:value="activeTab" type="line" animated @update:value="handleTabChange">
                 <template #suffix>
-                  <NSpace v-if="activeTab === 'sql-content'" align="center" :size="12">
-                    <NButton size="small" type="primary" secondary @click="handleFormatSQL">格式化</NButton>
-                    <NButton size="small" type="primary" secondary :loading="checking" @click="handleSyntaxCheck">
-                      sql审核
+                  <NSpace v-if="activeTab === 'sql-content'" align="center" :size="appStore.isMobile ? 6 : 12" :wrap="appStore.isMobile">
+                    <NButton :size="appStore.isMobile ? 'tiny' : 'small'" type="primary" secondary @click="handleFormatSQL">
+                      <template v-if="appStore.isMobile" #icon>
+                        <div class="i-ant-design:format-painter-outlined" />
+                      </template>
+                      <span v-if="!appStore.isMobile">格式化</span>
+                    </NButton>
+                    <NButton :size="appStore.isMobile ? 'tiny' : 'small'" type="primary" secondary :loading="checking" @click="handleSyntaxCheck">
+                      <template v-if="appStore.isMobile" #icon>
+                        <div class="i-ant-design:check-circle-outlined" />
+                      </template>
+                      <span v-if="!appStore.isMobile">sql审核</span>
                     </NButton>
                   </NSpace>
                 </template>
@@ -1295,7 +1499,7 @@ const submitHook = async () => {
                       :show-pagination="true"
                       :page-size="10"
                       :theme="theme"
-                      height="500px"
+                      :height="appStore.isMobile ? '300px' : '500px'"
                       @page-change="handleSqlPageChange"
                       @page-size-change="handleSqlPageSizeChange"
                     />
@@ -1305,7 +1509,7 @@ const submitHook = async () => {
                         :data="syntaxRows"
                         :pagination="{ pageSize: 10 }"
                         size="small"
-                        :scroll-x="1200"
+                        :scroll-x="appStore.isMobile ? 800 : 1200"
                       />
                     </NCard>
                   </div>
@@ -1324,18 +1528,18 @@ const submitHook = async () => {
                 <NTabPane name="results" tab="执行结果">
                   <div class="tab-content">
                     <div class="result-summary mb-16px">
-                      <NSpace>
+                      <NSpace :size="appStore.isMobile ? 'small' : 'medium'" :wrap="appStore.isMobile">
                         <NStatistic label="总执行数">
-                          <span class="text-16px font-bold">{{ taskStats?.total || 0 }}</span>
+                          <span :class="appStore.isMobile ? 'text-14px' : 'text-16px'" class="font-bold">{{ taskStats?.total || 0 }}</span>
                         </NStatistic>
                         <NStatistic label="成功数">
-                          <span class="text-16px text-green-600 font-bold">{{ taskStats?.completed || 0 }}</span>
+                          <span :class="appStore.isMobile ? 'text-14px' : 'text-16px'" class="text-green-600 font-bold">{{ taskStats?.completed || 0 }}</span>
                         </NStatistic>
                         <NStatistic label="失败数">
-                          <span class="text-16px text-red-600 font-bold">{{ taskStats?.failed || 0 }}</span>
+                          <span :class="appStore.isMobile ? 'text-14px' : 'text-16px'" class="text-red-600 font-bold">{{ taskStats?.failed || 0 }}</span>
                         </NStatistic>
                         <NStatistic label="警告数">
-                          <span class="text-16px text-orange-600 font-bold">{{ taskStats?.unexecuted || 0 }}</span>
+                          <span :class="appStore.isMobile ? 'text-14px' : 'text-16px'" class="text-orange-600 font-bold">{{ taskStats?.unexecuted || 0 }}</span>
                         </NStatistic>
                       </NSpace>
                     </div>
@@ -1345,7 +1549,7 @@ const submitHook = async () => {
                       :pagination="{ pageSize: 10 }"
                       :bordered="false"
                       size="small"
-                      :scroll-x="1000"
+                      :scroll-x="appStore.isMobile ? 800 : 1000"
                     />
                   </div>
                 </NTabPane>
@@ -1353,7 +1557,7 @@ const submitHook = async () => {
                 <!-- 执行进度标签页 -->
                 <NTabPane name="osc-progress" tab="执行进度">
                   <div class="tab-content">
-                    <LogViewer :content="oscContent" height="500px" :theme="theme" />
+                    <LogViewer :content="oscContent" :height="appStore.isMobile ? '300px' : '500px'" :theme="theme" />
                   </div>
                 </NTabPane>
               </NTabs>
@@ -1399,7 +1603,7 @@ const submitHook = async () => {
       </template>
     </NModal>
 
-    <NModal v-model:show="hookVisible" preset="dialog" title="HOOK工单" :style="{ width: '65%' }">
+    <NModal v-model:show="hookVisible" preset="dialog" title="HOOK工单" :style="{ width: appStore.isMobile ? '95%' : '65%' }">
       <NForm :model="hookForm">
         <NFormItem label="工单ID"><NInput v-model:value="hookForm.order_id" disabled /></NFormItem>
         <NFormItem label="当前工单"><NInput v-model:value="hookForm.title" disabled /></NFormItem>
@@ -1411,8 +1615,8 @@ const submitHook = async () => {
         <NFormItem label="目标库">
           <NCard>
             <div v-for="(item, idx) in targetList" :key="idx" class="mb-8px">
-              <div class="grid grid-cols-12 gap-12px">
-                <div class="col-span-4">
+              <div class="grid gap-12px" :class="appStore.isMobile ? 'grid-cols-1' : 'grid-cols-12'">
+                <div :class="appStore.isMobile ? 'col-span-1' : 'col-span-4'">
                   <NFormItem label="环境">
                     <NSelect
                       v-model:value="item.environment"
@@ -1423,7 +1627,7 @@ const submitHook = async () => {
                     />
                   </NFormItem>
                 </div>
-                <div class="col-span-4">
+                <div :class="appStore.isMobile ? 'col-span-1' : 'col-span-4'">
                   <NFormItem label="实例">
                     <NSelect
                       v-model:value="item.instance_id"
@@ -1434,12 +1638,12 @@ const submitHook = async () => {
                     />
                   </NFormItem>
                 </div>
-                <div class="col-span-3">
+                <div :class="appStore.isMobile ? 'col-span-1' : 'col-span-3'">
                   <NFormItem label="库名">
                     <NSelect v-model:value="item.schema" :options="schemasOptions[idx] || []" clearable filterable />
                   </NFormItem>
                 </div>
-                <div class="col-span-1 flex items-center">
+                <div :class="appStore.isMobile ? 'col-span-1 flex items-center' : 'col-span-1 flex items-center'">
                   <NButton v-if="targetList.length > 1" tertiary @click="removeTarget(idx)">删除</NButton>
                 </div>
               </div>
@@ -1512,6 +1716,12 @@ const submitHook = async () => {
   grid-template-columns: 1fr 3fr;
   gap: 24px;
   margin-bottom: 24px;
+}
+
+/* 移动端单列布局 */
+.middle-content-container.mobile-layout {
+  grid-template-columns: 1fr;
+  gap: 16px;
 }
 
 .progress-section {
@@ -1719,29 +1929,50 @@ const submitHook = async () => {
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
-
-  .result-summary {
-    padding: 12px;
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .order-detail-page {
+    padding: 8px;
+    gap: 12px !important;
   }
 
-  .task-stats {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .tab-content {
-    padding: 12px 0;
-  }
-}
-
-@media (max-width: 480px) {
   .order-header-container {
     padding: 12px;
   }
 
   .info-item {
     padding: 8px 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .info-item .label {
+    font-size: 12px;
+    color: #999;
+  }
+
+  .info-item .value {
+    font-size: 13px;
+  }
+
+  .status-display-section {
+    min-width: 100% !important;
+    padding: 12px 8px !important;
+  }
+
+  .sci-fi-status-container {
+    min-width: 100%;
+    padding: 12px;
+  }
+
+  .status-text {
+    font-size: 14px;
+  }
+
+  .middle-content-container {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
   }
 
   .progress-info {
@@ -1750,6 +1981,57 @@ const submitHook = async () => {
 
   .progress-item {
     gap: 6px;
+  }
+
+  .task-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tab-content {
+    padding: 8px 0;
+  }
+
+  .result-summary {
+    padding: 12px;
+  }
+
+  .result-summary .n-statistic {
+    min-width: 80px;
+  }
+
+  /* 表格优化 */
+  .n-data-table {
+    font-size: 12px;
+  }
+
+  /* 按钮组优化 */
+  .n-button {
+    font-size: 12px;
+  }
+
+  /* 步骤条优化 */
+  .n-steps {
+    font-size: 12px;
+  }
+
+  .n-step {
+    padding: 8px 0;
+  }
+
+  /* 标签页优化 */
+  .n-tabs {
+    font-size: 13px;
+  }
+
+  /* 卡片优化 */
+  .n-card {
+    padding: 12px;
+  }
+
+  /* 操作日志优化 */
+  .n-timeline {
+    font-size: 12px;
   }
 }
 </style>

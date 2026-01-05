@@ -2,8 +2,9 @@ package api
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Response struct {
@@ -49,4 +50,3 @@ func newError(code int, msg string) error {
 func (e Error) Error() string {
 	return e.Message
 }
-

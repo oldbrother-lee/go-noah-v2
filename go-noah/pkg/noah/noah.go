@@ -20,14 +20,17 @@ func NewServerApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), erro
 	global.JWT = jwt.NewJwt(conf)
 	global.DB = repository.NewDB(conf, logger)
 	global.Enforcer = repository.NewCasbinEnforcer(conf, logger, global.DB)
-	global.Repo = repository.NewRepository(logger, global.DB, global.Enforcer)
-	global.Transaction = repository.NewTransaction(global.Repo)
 	global.Logger = logger
+	global.Conf = conf
+
+	// 创建 Repository 和 Transaction（不存储在 global，避免循环导入）
+	repo := repository.NewRepository(logger, global.DB, global.Enforcer)
+	transaction := repository.NewTransaction(repo)
 
 	httpServer := server.NewHTTPServer(logger, conf, global.JWT, global.Enforcer)
 
-	jobBase := job.NewJob(global.Transaction, global.Logger, global.Sid)
-	userRepo := repository.NewUserRepository(global.Repo)
+	jobBase := job.NewJob(transaction, global.Logger, global.Sid)
+	userRepo := repository.NewUserRepository(repo)
 	userJob := job.NewUserJob(jobBase, userRepo)
 	jobServer := server.NewJobServer(global.Logger, userJob)
 
@@ -50,13 +53,16 @@ func NewTaskApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), error)
 	global.Sid = sid.NewSid()
 	global.DB = repository.NewDB(conf, logger)
 	global.Enforcer = repository.NewCasbinEnforcer(conf, logger, global.DB)
-	global.Repo = repository.NewRepository(logger, global.DB, global.Enforcer)
-	global.Transaction = repository.NewTransaction(global.Repo)
 	global.Logger = logger
+	global.Conf = conf
 
-	userRepo := repository.NewUserRepository(global.Repo)
+	// 创建 Repository 和 Transaction（不存储在 global，避免循环导入）
+	repo := repository.NewRepository(logger, global.DB, global.Enforcer)
+	transaction := repository.NewTransaction(repo)
 
-	tk := task.NewTask(global.Transaction, global.Logger, global.Sid)
+	userRepo := repository.NewUserRepository(repo)
+
+	tk := task.NewTask(transaction, global.Logger, global.Sid)
 	userTask := task.NewUserTask(tk, userRepo)
 	taskServer := server.NewTaskServer(global.Logger, userTask)
 
@@ -79,6 +85,7 @@ func NewMigrateApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), err
 	global.DB = repository.NewDB(conf, logger)
 	global.Enforcer = repository.NewCasbinEnforcer(conf, logger, global.DB)
 	global.Logger = logger
+	global.Conf = conf
 
 	migrateServer := server.NewMigrateServer(global.DB, global.Logger, global.Sid, global.Enforcer)
 

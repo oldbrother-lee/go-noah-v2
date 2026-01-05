@@ -35,3 +35,18 @@ log:
   max_age: 7
   max_size: 1024
   compress: true
+
+# LDAP 配置（从 goInsight 迁移）
+ldap:
+  enable: true               # 是否启用 LDAP 认证
+  host: 192.168.100.51       # LDAP 服务器地址
+  port: 389                  # LDAP 端口（389 或 636 for SSL）
+  use_ssl: false             # 是否使用 SSL/TLS
+  base_dn: "dc=qixiangyun,dc=com"  # 基础 DN
+  bind_dn: "cn=admin,dc=qixiangyun,dc=com"  # 管理员绑定 DN（用于搜索用户）
+  bind_pass: "qxy906906"     # 管理员密码
+  user_filter: "(&(objectClass=inetOrgPerson)(uid=%s))"  # 用户搜索过滤器，%s 会被用户名替换
+  attributes:
+    nickname: "sn"           # 昵称属性名
+    email: "mail"           # 邮箱属性名
+    mobile: "mobile"        # 手机号属性名

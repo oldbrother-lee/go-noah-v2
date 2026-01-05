@@ -33,6 +33,7 @@ function createProxyItem(item: App.Service.ServiceConfigItem, enableLog: boolean
   proxy[item.proxyPattern] = {
     target: item.baseURL,
     changeOrigin: true,
+    ws: true, // 启用 WebSocket 代理支持
     configure: (_proxy: HttpProxy.Server, options: ProxyOptions) => {
       _proxy.on('proxyReq', (_proxyReq, req, _res) => {
         if (!enableLog) return;
@@ -46,6 +47,12 @@ function createProxyItem(item: App.Service.ServiceConfigItem, enableLog: boolean
       _proxy.on('error', (_err, req, _res) => {
         if (!enableLog) return;
         consola.log(bgRed(`Error: ${req.method} `), green(`${options.target}${req.url}`));
+      });
+      // WebSocket 升级事件
+      _proxy.on('upgrade', (req, socket, head) => {
+        if (enableLog) {
+          consola.log(`${lightBlue('[WebSocket upgrade]')}: ${green(`${req.url}`)}`);
+        }
       });
     },
     rewrite: path => path.replace(new RegExp(`^${item.proxyPattern}`), '')

@@ -9,6 +9,7 @@ import TableHeaderOperation from '@/components/advanced/table-header-operation.v
 import History from '../history/index.vue';
 import Favorite from '../favorite/index.vue';
 import SvgIcon from '@/components/custom/svg-icon.vue';
+import { useAppStore } from '@/store/modules/app';
 // CodeMirror 6 imports
 import { EditorState, Compartment, RangeSet, RangeSetBuilder } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, gutter, GutterMarker, ViewPlugin, ViewUpdate } from '@codemirror/view';
@@ -21,15 +22,23 @@ import { useRouter } from 'vue-router';
 // 使用普通textarea
 
 const { t } = useI18n();
+const appStore = useAppStore();
 
 // 响应式数据
-const showLeftPanel = ref(true);
+const showLeftPanel = ref(!appStore.isMobile); // 移动端默认隐藏左侧面板
 const selectedSchema = ref<any>({});
 const activeKey = ref(localStorage.getItem('dms-active-key') || '1');
 const newTabIndex = ref(Number(localStorage.getItem('dms-new-tab-index')) || 2);
 const tabCompletion = ref<any>({});
-// 改用网格布局管理左右区域占比
-const rightSpan = computed(() => (showLeftPanel.value ? 17 : 24));
+// 改用网格布局管理左右区域占比，移动端自适应
+const rightSpan = computed(() => {
+  if (appStore.isMobile) return 24; // 移动端全宽
+  return showLeftPanel.value ? 17 : 24;
+});
+const leftSpan = computed(() => {
+  if (appStore.isMobile) return 0; // 移动端不显示左侧面板
+  return showLeftPanel.value ? 7 : 0;
+});
 
 // 左侧数据
 const schemas = ref<any[]>([]);
@@ -2147,9 +2156,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <NCard size="small" class="das-page" :content-style="{ padding: '12px' }" style="height: auto; min-height: calc(100vh - 120px)">
-    <NGrid cols="24" x-gap="12" y-gap="12" style="height: 100%">
-      <NGi v-if="showLeftPanel" span="7">
+  <NCard size="small" class="das-page" :content-style="{ padding: appStore.isMobile ? '8px' : '12px' }" style="height: auto; min-height: calc(100vh - 120px)">
+    <NGrid cols="24" :x-gap="appStore.isMobile ? 8 : 12" :y-gap="appStore.isMobile ? 8 : 12" responsive="screen" style="height: 100%">
+      <!-- 桌面端左侧面板 -->
+      <NGi v-if="showLeftPanel && !appStore.isMobile" :span="leftSpan">
         <NCard size="small" title="数据库选择" :segmented="{ content: true }" class="das-left-card" :style="leftContainerStyle" :content-style="{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }">
           <template #header-extra>
             <NSpace :size="6">
@@ -2172,7 +2182,7 @@ onUnmounted(() => {
             </NSpace>
           </template>
           <div style="flex-shrink: 0; padding-bottom: 10px;">
-            <NSpace vertical :size="10">
+            <NSpace vertical :size="appStore.isMobile ? 8 : 10">
               <NSelect
                 v-model:value="bindTitle"
                 :options="schemas.map((s: any) => ({
@@ -2181,6 +2191,7 @@ onUnmounted(() => {
                 }))"
                 filterable
                 clearable
+                :size="appStore.isMobile ? 'small' : 'medium'"
                 placeholder="请选择库名..."
                 @update:value="getTables"
               />
@@ -2188,10 +2199,11 @@ onUnmounted(() => {
                 v-if="showSearch"
                 v-model:value="leftTableSearch"
                 clearable
+                :size="appStore.isMobile ? 'small' : 'medium'"
                 placeholder="输入要搜索的表名..."
                 @keyup.enter="onSearch(leftTableSearch)"
               />
-              <NText depth="3" class="das-hint">搜索不到需要的表？试试刷新按钮。</NText>
+              <NText v-if="!appStore.isMobile" depth="3" class="das-hint">搜索不到需要的表？试试刷新按钮。</NText>
             </NSpace>
           </div>
           <div style="flex: 1; min-height: 0; overflow: hidden;">
@@ -2215,20 +2227,37 @@ onUnmounted(() => {
         </NCard>
       </NGi>
       <NGi :span="rightSpan">
-        <div ref="rightContainerRef" style="display: flex; flex-direction: column; height: 100%; gap: 12px">
-          <NCard v-if="!showLeftPanel" size="small" class="das-ghost-card" :bordered="false">
+        <div ref="rightContainerRef" class="das-right-container" style="display: flex; flex-direction: column; height: 100%; gap: 12px">
+          <NCard v-if="!showLeftPanel && !appStore.isMobile" size="small" class="das-ghost-card" :bordered="false">
             <NButton quaternary size="small" @click="foldLeft">
               <template #icon><SvgIcon icon="line-md:menu-fold-right" /></template>
               展开数据库面板
             </NButton>
           </NCard>
+          <!-- 移动端显示左侧面板按钮 -->
+          <NCard v-if="appStore.isMobile && !showLeftPanel" size="small" class="das-mobile-header" :bordered="false" :content-style="{ padding: '8px' }">
+            <NSpace justify="space-between" align="center">
+              <NButton quaternary size="small" @click="foldLeft">
+                <template #icon><SvgIcon icon="line-md:menu-fold-right" /></template>
+                数据库
+              </NButton>
+              <NSpace :size="8">
+                <NButton quaternary size="small" @click="gotoFavorite">
+                  <template #icon><SvgIcon icon="carbon:star" /></template>
+                </NButton>
+                <NButton quaternary size="small" @click="gotoHistory">
+                  <template #icon><SvgIcon icon="carbon:time" /></template>
+                </NButton>
+              </NSpace>
+            </NSpace>
+          </NCard>
           <NCard size="small" class="das-editor-shell" :segmented="{ content: true }" style="flex: 1; min-height: 0; display: flex; flex-direction: column;" :content-style="{ flex: 1, overflow: 'auto' }">
             <template #header>
-              <NSpace justify="space-between" align="center" class="das-shell-header">
+              <NSpace justify="space-between" align="center" class="das-shell-header" :wrap="appStore.isMobile">
                 <div class="das-title">
-                  <span>SQL 工作台</span>
-                  <NTag size="small" :type="schemaError ? 'error' : 'success'">{{ currentSchemaLabel }}</NTag>
-                  <NText v-if="schemaError" type="error" style="font-size: 12px; font-weight: normal;">{{ schemaError }}</NText>
+                  <span class="das-title-text">SQL 工作台</span>
+                  <NTag size="small" :type="schemaError ? 'error' : 'success'" class="das-title-tag">{{ currentSchemaLabel }}</NTag>
+                  <NText v-if="schemaError" type="error" class="das-title-error">{{ schemaError }}</NText>
                 </div>
                 <!-- <NSpace :size="8" wrap>
                   <NButton quaternary size="small" @click="gotoFavorite">
@@ -2296,8 +2325,8 @@ onUnmounted(() => {
                 </template>
                 <NSpace vertical :size="0">
                   <div class="code-editor-wrapper">
-                    <div class="code-editor-container" :style="{ height: (pane.editorHeight || 300) + 'px' }" :ref="(el) => setEditorRef(pane, el as unknown as HTMLElement)" @contextmenu="handleContextMenu($event, pane)" />
-                    <div class="resize-handle" @mousedown.prevent="onResizeStart($event, pane)">
+                    <div class="code-editor-container" :style="{ height: (appStore.isMobile ? (pane.editorHeight || 200) : (pane.editorHeight || 300)) + 'px' }" :ref="(el) => setEditorRef(pane, el as unknown as HTMLElement)" @contextmenu="handleContextMenu($event, pane)" />
+                    <div v-if="!appStore.isMobile" class="resize-handle" @mousedown.prevent="onResizeStart($event, pane)">
                       <div class="resize-handle-bar"></div>
                     </div>
                   </div>
@@ -2308,8 +2337,8 @@ onUnmounted(() => {
                     class="das-result-tabs"
                   >
                     <template #suffix>
-                      <NSpace :size="6" wrap>
-                        <NTooltip trigger="hover" :show-arrow="false">
+                      <NSpace :size="appStore.isMobile ? 4 : 6" wrap>
+                        <NTooltip v-if="!appStore.isMobile" trigger="hover" :show-arrow="false">
                           <template #trigger>
                             <NButton size="tiny" type="primary" :loading="pane.loading" @click="executeSQL(pane)">
                               <template #icon><SvgIcon icon="carbon:flash" /></template>
@@ -2318,7 +2347,10 @@ onUnmounted(() => {
                           </template>
                           {{ executeTooltip }}
                         </NTooltip>
-                        <NTooltip trigger="hover" :show-arrow="false">
+                        <NButton v-else size="tiny" type="primary" :loading="pane.loading" @click="executeSQL(pane)">
+                          <template #icon><SvgIcon icon="carbon:flash" /></template>
+                        </NButton>
+                        <NTooltip v-if="!appStore.isMobile" trigger="hover" :show-arrow="false">
                           <template #trigger>
                             <NButton size="tiny" @click="(e) => formatSQL(pane, e.shiftKey ? 'minify' : 'format')">
                               <template #icon><SvgIcon icon="carbon:code" /></template>
@@ -2327,9 +2359,12 @@ onUnmounted(() => {
                           </template>
                           点击格式化，按住 Shift 点击压缩
                         </NTooltip>
+                        <NButton v-else size="tiny" @click="(e) => formatSQL(pane, e.shiftKey ? 'minify' : 'format')">
+                          <template #icon><SvgIcon icon="carbon:code" /></template>
+                        </NButton>
                         <NButton size="tiny" :loading="dictLoading" @click="loadDBDictData">
                           <template #icon><SvgIcon icon="carbon:document" /></template>
-                          数据字典
+                          <span v-if="!appStore.isMobile">数据字典</span>
                         </NButton>
                         <!-- <NButton size="tiny" @click="gotoFavorite">
                           <template #icon><SvgIcon icon="carbon:star" /></template>
@@ -2366,7 +2401,7 @@ onUnmounted(() => {
                             :data="getPagedTableData(pane)"
                             border
                             stripe
-                            :height="400"
+                            :height="appStore.isMobile ? 300 : 400"
                             :column-config="{ resizable: true }"
                             :resizable-config="{ showDragTip: false }"
                             :scroll-y="{ enabled: true }"
@@ -2426,10 +2461,74 @@ onUnmounted(() => {
       </NGi>
     </NGrid>
     
+    <!-- 移动端左侧面板（全屏覆盖） -->
+    <NCard
+      v-if="showLeftPanel && appStore.isMobile"
+      size="small"
+      title="数据库选择"
+      :segmented="{ content: true }"
+      class="das-left-card das-mobile-left-panel"
+      :style="leftContainerStyle"
+      :content-style="{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }"
+    >
+      <template #header-extra>
+        <NSpace :size="4">
+          <NButton quaternary circle size="small" :loading="refreshLoading" @click="refreshSchemas">
+            <template #icon><SvgIcon icon="carbon:renew" /></template>
+          </NButton>
+          <NButton quaternary circle size="small" @click="foldLeft">
+            <template #icon><SvgIcon icon="line-md:menu-fold-left" /></template>
+          </NButton>
+        </NSpace>
+      </template>
+      <div style="flex-shrink: 0; padding-bottom: 10px;">
+        <NSpace vertical :size="8">
+          <NSelect
+            v-model:value="bindTitle"
+            :options="schemas.map((s: any) => ({
+              label: `${s.remark || s.instanceName || s.hostname}:${s.schema}`,
+              value: `${s.instance_id}#${s.schema}#${s.db_type}`
+            }))"
+            filterable
+            clearable
+            size="small"
+            placeholder="请选择库名..."
+            @update:value="getTables"
+          />
+          <NInput
+            v-if="showSearch"
+            v-model:value="leftTableSearch"
+            clearable
+            size="small"
+            placeholder="输入要搜索的表名..."
+            @keyup.enter="onSearch(leftTableSearch)"
+          />
+        </NSpace>
+      </div>
+      <div style="flex: 1; min-height: 0; overflow: hidden;">
+        <NScrollbar style="height: 100%">
+          <NSpin :show="treeLoading">
+            <NTree
+              :data="filteredTreeData"
+              block-line
+              show-line
+              :virtual-scroll="true"
+              :render-label="renderTreeLabel"
+              :render-switcher-icon="renderSwitcherIcon"
+              :get-children="getNodeChildren"
+              v-model:expanded-keys="expandedKeys"
+              :node-props="(info: any) => ({ onDblclick: () => handleNodeDblClick(info.option.key) })"
+              @update:selected-keys="handleNodeClick"
+            />
+          </NSpin>
+        </NScrollbar>
+      </div>
+    </NCard>
+    
     <NModal
       v-model:show="showDictModal"
       preset="card"
-      style="width: 90%; height: 90vh; max-width: 1600px;"
+      :style="{ width: appStore.isMobile ? '95%' : '90%', height: appStore.isMobile ? '85vh' : '90vh', maxWidth: appStore.isMobile ? '100%' : '1600px' }"
       :title="`数据字典: ${selectedSchema.schema || ''}`"
       :bordered="false"
       size="huge"
@@ -2459,6 +2558,93 @@ onUnmounted(() => {
 <style scoped>
 .das-page {
   height: calc(100vh - 120px);
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .das-page {
+    height: calc(100vh - 80px);
+  }
+  
+  .das-right-container {
+    gap: 8px !important;
+  }
+  
+  .das-mobile-header {
+    margin-bottom: 4px;
+  }
+  
+  .das-shell-header {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  
+  .das-title {
+    flex-wrap: wrap;
+    gap: 4px !important;
+    font-size: 14px;
+  }
+  
+  .das-title-text {
+    font-size: 14px;
+  }
+  
+  .das-title-tag {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+  
+  .das-title-error {
+    font-size: 11px !important;
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+  }
+  
+  .code-editor-container {
+    font-size: 12px !important;
+  }
+  
+  .code-editor-container :deep(.cm-editor) {
+    font-size: 12px !important;
+  }
+  
+  .das-editor-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .das-result-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .das-result-stat {
+    font-size: 11px;
+    gap: 8px;
+  }
+  
+  .tab-title-container {
+    max-width: 100px;
+  }
+  
+  .das-mobile-left-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    width: 100%;
+    height: 100vh;
+    border-radius: 0;
+    background-color: var(--n-color);
+  }
+  
+  .das-left-card {
+    height: 100%;
+  }
 }
 .tab-title-container {
   display: flex;

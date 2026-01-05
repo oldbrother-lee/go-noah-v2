@@ -64,7 +64,13 @@ func InitUserRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logge
 		// Strict permission routing group
 		strictAuthRouter := v1.Group("/").Use(middleware.StrictAuth(jwt, logger), middleware.AuthMiddleware(e))
 		{
+			// 用户管理路由
 			strictAuthRouter.GET("/users", handler.UserHandlerApp.GetUsers)
+			strictAuthRouter.GET("/users/:uid", handler.UserHandlerApp.GetUser)
+			strictAuthRouter.POST("/users", handler.UserHandlerApp.CreateUser)
+			strictAuthRouter.PUT("/users/:uid", handler.UserHandlerApp.UpdateUser)
+			strictAuthRouter.DELETE("/users/:uid", handler.UserHandlerApp.DeleteUser)
+			strictAuthRouter.PUT("/users/password", handler.UserHandlerApp.ChangePassword)
 		}
 	}
 }

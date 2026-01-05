@@ -36,10 +36,12 @@ import {
   fetchOrdersUsers,
   fetchSyntaxCheck
 } from '@/service/api/orders';
+import { useAppStore } from '@/store/modules/app';
 
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const appStore = useAppStore();
 
 // 页面标题与工单类型
 const sqlType = ref<string>('DDL');
@@ -179,8 +181,8 @@ onMounted(async () => {
   await loadEnvironments();
   await loadUsers();
   initEditor();
-  // 观察左侧卡片内容高度变化，右侧编辑器按此高度限制
-  if (leftContentRef.value) {
+  // 观察左侧卡片内容高度变化，右侧编辑器按此高度限制（仅桌面端）
+  if (leftContentRef.value && !appStore.isMobile) {
     leftResizeObserver = new ResizeObserver(entries => {
       const entry = entries[0];
       if (entry) {
@@ -188,6 +190,9 @@ onMounted(async () => {
       }
     });
     leftResizeObserver.observe(leftContentRef.value);
+  } else if (appStore.isMobile) {
+    // 移动端设置固定高度
+    leftContentHeight.value = 400;
   }
 });
 
@@ -420,21 +425,22 @@ watch(
 </script>
 
 <template>
-  <div>
-    <NCard :title="pageTitle">
-      <NGrid :x-gap="16" :y-gap="16" style="align-items: stretch">
+  <div class="order-commit-page">
+    <NCard :title="pageTitle" :content-style="{ padding: appStore.isMobile ? '8px' : '16px' }">
+      <NGrid :x-gap="appStore.isMobile ? 8 : 16" :y-gap="appStore.isMobile ? 8 : 16" responsive="screen" style="align-items: stretch">
         <!-- 左侧表单 -->
-        <NGi span="8">
+        <NGi :span="appStore.isMobile ? 24 : 8">
           <NCard style="height: 100%">
             <div ref="leftContentRef">
-              <NForm label-placement="left" :label-width="96">
+              <NForm :label-placement="appStore.isMobile ? 'top' : 'left'" :label-width="appStore.isMobile ? 'auto' : 96">
                 <NFormItem label="标题">
-                  <NInput v-model:value="formModel.title" placeholder="请输入工单标题" />
+                  <NInput v-model:value="formModel.title" :size="appStore.isMobile ? 'small' : 'medium'" placeholder="请输入工单标题" />
                 </NFormItem>
                 <NFormItem label="备注">
                   <NInput
                     v-model:value="formModel.remark"
                     type="textarea"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     :autosize="{ minRows: 2, maxRows: 6 }"
                     placeholder="请输入工单需求或备注"
                   />
@@ -445,6 +451,7 @@ watch(
                 <NFormItem label="DB类型">
                   <NSelect
                     v-model:value="formModel.dbType"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     :options="[
                       { label: 'MySQL', value: 'MySQL' },
                       { label: 'TiDB', value: 'TiDB' }
@@ -455,6 +462,7 @@ watch(
                 <NFormItem label="环境">
                   <NSelect
                     v-model:value="formModel.environment"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     :options="environments.map((e: any) => ({ label: e.name, value: e.id }))"
                     filterable
                     clearable
@@ -465,6 +473,7 @@ watch(
                 <NFormItem label="实例">
                   <NSelect
                     v-model:value="formModel.instanceId"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     :options="instances.map((i: any) => ({ label: i.remark, value: i.instance_id }))"
                     filterable
                     clearable
@@ -475,6 +484,7 @@ watch(
                 <NFormItem label="库名">
                   <NSelect
                     v-model:value="formModel.schema"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     :options="schemas.map((s: any) => ({ label: s.schema, value: s.schema }))"
                     filterable
                     clearable
@@ -484,6 +494,7 @@ watch(
                 <NFormItem v-if="isExportOrder" label="文件格式">
                   <NSelect
                     v-model:value="formModel.exportFileFormat"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     :options="[
                       { label: 'XLSX', value: 'XLSX' },
                       { label: 'CSV', value: 'CSV' }
@@ -494,6 +505,7 @@ watch(
                   <NDatePicker
                     v-model:formatted-value="formModel.scheduleTime"
                     type="datetime"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     clearable
                     value-format="yyyy-MM-dd HH:mm:ss"
                     placeholder="请选择计划执行时间(可选)"
@@ -503,6 +515,7 @@ watch(
                 <NFormItem label="审核人">
                   <NSelect
                     v-model:value="formModel.approver"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     multiple
                     filterable
                     clearable
@@ -515,6 +528,7 @@ watch(
                 <NFormItem label="执行人">
                   <NSelect
                     v-model:value="formModel.executor"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     multiple
                     filterable
                     clearable
@@ -527,6 +541,7 @@ watch(
                 <NFormItem label="复核人">
                   <NSelect
                     v-model:value="formModel.reviewer"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     multiple
                     filterable
                     clearable
@@ -539,6 +554,7 @@ watch(
                 <NFormItem label="抄送人">
                   <NSelect
                     v-model:value="formModel.cc"
+                    :size="appStore.isMobile ? 'small' : 'medium'"
                     multiple
                     filterable
                     clearable
@@ -549,22 +565,27 @@ watch(
                   />
                 </NFormItem>
                 <NFormItem>
-                  <NButton type="primary" :loading="loading" @click="submitOrder">提交</NButton>
+                  <NButton type="primary" :size="appStore.isMobile ? 'small' : 'medium'" :loading="loading" block="appStore.isMobile" @click="submitOrder">提交</NButton>
                 </NFormItem>
               </NForm>
             </div>
           </NCard>
         </NGi>
         <!-- 右侧编辑区域 -->
-        <NGi span="16">
-          <NCard class="editor-card" style="height: 100%">
-            <div class="editor-inner" :style="{ height: leftContentHeight + 'px' }">
-              <NAlert type="info" title="说明" closable>支持多条SQL语句，每条SQL须以 ; 结尾</NAlert>
+        <NGi :span="appStore.isMobile ? 24 : 16">
+          <NCard class="editor-card" :style="{ height: appStore.isMobile ? 'auto' : '100%' }">
+            <div class="editor-inner" :style="{ height: appStore.isMobile ? '400px' : (leftContentHeight > 0 ? leftContentHeight + 'px' : '500px') }">
+              <NAlert type="info" title="说明" :closable="!appStore.isMobile" :size="appStore.isMobile ? 'small' : 'medium'">支持多条SQL语句，每条SQL须以 ; 结尾</NAlert>
               <div style="margin: 8px 0">
-                <NSpace>
-                  <NButton tertiary type="default" @click="formatSQL">格式化</NButton>
-                  <NButton tertiary type="default" :loading="checking" :disabled="checking" @click="syntaxCheck">
-                    {{ checking ? '检查中...' : '语法检查' }}
+                <NSpace :size="appStore.isMobile ? 4 : 8" :wrap="appStore.isMobile">
+                  <NButton :size="appStore.isMobile ? 'small' : 'medium'" tertiary type="default" @click="formatSQL">
+                    <template v-if="appStore.isMobile" #icon>
+                      <div class="i-ant-design:format-painter-outlined" />
+                    </template>
+                    <span v-if="!appStore.isMobile">格式化</span>
+                  </NButton>
+                  <NButton :size="appStore.isMobile ? 'small' : 'medium'" tertiary type="default" :loading="checking" :disabled="checking" @click="syntaxCheck">
+                    {{ checking ? '检查中...' : (appStore.isMobile ? '检查' : '语法检查') }}
                   </NButton>
                 </NSpace>
               </div>
@@ -575,7 +596,7 @@ watch(
         </NGi>
       </NGrid>
     </NCard>
-    <NCard v-if="syntaxRows.length" title="语法检查结果" style="margin-top: 12px">
+    <NCard v-if="syntaxRows.length" title="语法检查结果" :style="{ marginTop: appStore.isMobile ? '8px' : '12px' }" :content-style="{ padding: appStore.isMobile ? '8px' : '16px' }">
       <NDataTable
         :columns="visibleSyntaxColumns"
         :data="syntaxRows"
@@ -583,15 +604,21 @@ watch(
         size="small"
         single-line
         table-layout="fixed"
+        :scroll-x="appStore.isMobile ? 800 : 1200"
       />
     </NCard>
   </div>
 </template>
 
 <style scoped>
+.order-commit-page {
+  padding: 0;
+}
+
 :deep(.n-card .n-card__content) {
   padding: 12px;
 }
+
 /* 参考 SQL 查询页的编辑器样式 */
 .editor-card :deep(.n-card__content) {
   /* 右侧卡片内容作为外层容器，不再直接拉伸 */
@@ -628,5 +655,71 @@ watch(
 }
 .code-editor-container :deep(.cm-activeLine) {
   background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .order-commit-page {
+    padding: 0;
+  }
+
+  :deep(.n-card .n-card__content) {
+    padding: 8px;
+  }
+
+  .editor-inner {
+    min-height: 300px;
+  }
+
+  .code-editor-container {
+    min-height: 300px;
+    font-size: 12px;
+  }
+
+  .code-editor-container :deep(.cm-editor) {
+    font-size: 12px !important;
+  }
+
+  /* 表单优化 */
+  :deep(.n-form-item) {
+    margin-bottom: 16px;
+  }
+
+  :deep(.n-form-item-label) {
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+
+  /* 按钮优化 */
+  :deep(.n-button) {
+    font-size: 13px;
+  }
+
+  /* 选择框优化 */
+  :deep(.n-select) {
+    font-size: 13px;
+  }
+
+  /* 输入框优化 */
+  :deep(.n-input) {
+    font-size: 13px;
+  }
+
+  /* 表格优化 */
+  :deep(.n-data-table) {
+    font-size: 12px;
+  }
+
+  /* 卡片标题优化 */
+  :deep(.n-card-header) {
+    padding: 12px;
+    font-size: 16px;
+  }
+
+  /* 警告框优化 */
+  :deep(.n-alert) {
+    font-size: 12px;
+    padding: 8px;
+  }
 }
 </style>

@@ -1,12 +1,13 @@
 package middleware
 
 import (
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"net/http"
 	"go-noah/api"
 	"go-noah/pkg/jwt"
 	"go-noah/pkg/log"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func StrictAuth(j *jwt.JWT, logger *log.Logger) gin.HandlerFunc {
