@@ -179,7 +179,11 @@ const routeMap: RouteMap = {
   "das_orders-list": "/das/orders-list",
   "home": "/home",
   "iframe-page": "/iframe-page/:url",
-  "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?"
+  "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?",
+  "system": "/system",
+  "system_menu": "/system/menu",
+  "system_permission": "/system/permission",
+  "system_user": "/system/user"
 };
 
 /**

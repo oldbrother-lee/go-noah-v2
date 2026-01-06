@@ -64,20 +64,19 @@ func (h *AdminHandler) GetMenus(ctx *gin.Context) {
 // GetAdminMenus godoc
 // @Summary 获取管理员菜单
 // @Schemes
-// @Description 获取管理员菜单列表
+// @Description 获取管理员菜单列表（Soybean-admin格式）
 // @Tags 菜单模块
 // @Accept json
 // @Produce json
 // @Security Bearer
-// @Success 200 {object} api.GetMenuResponse
+// @Success 200 {object} api.GetSoybeanMenuResponse
 // @Router /v1/admin/menus [get]
 func (h *AdminHandler) GetAdminMenus(ctx *gin.Context) {
-	data, err := service.AdminServiceApp.GetAdminMenus(ctx)
+	data, err := service.AdminServiceApp.GetAdminMenusSoybean(ctx)
 	if err != nil {
 		api.HandleError(ctx, http.StatusBadRequest, api.ErrBadRequest, nil)
 		return
 	}
-	// 过滤权限菜单
 	api.HandleSuccess(ctx, data)
 }
 

@@ -45,8 +45,12 @@ func (j *JWT) GenToken(userId uint, expiresAt time.Time) (string, error) {
 }
 
 func (j *JWT) ParseToken(tokenString string) (*MyCustomClaims, error) {
+	// 移除 Bearer 前缀（如果存在）
+	tokenString = strings.TrimSpace(tokenString)
 	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
-	if strings.TrimSpace(tokenString) == "" {
+	tokenString = strings.TrimSpace(tokenString)
+	
+	if tokenString == "" {
 		return nil, errors.New("token is empty")
 	}
 	token, err := jwt.ParseWithClaims(tokenString, &MyCustomClaims{}, func(token *jwt.Token) (interface{}, error) {

@@ -6,8 +6,8 @@ declare namespace Api {
    */
   namespace Auth {
     interface LoginToken {
-      token: string;
-      refreshToken: string;
+      accessToken: string;
+      token?: string; // 兼容字段，如果后端返回 accessToken，前端会映射到 token
     }
 
     interface UserInfo {

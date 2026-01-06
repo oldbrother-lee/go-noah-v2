@@ -17,6 +17,20 @@ type Menu struct {
 	HideInMenu bool   `json:"hideInMenu,omitempty" gorm:"column:hide_in_menu;default:false;comment:是否保活"`  // 是否保活
 	Target     string `json:"target,omitempty" gorm:"column:target;type:varchar(20);comment:全连接跳转模式"`      // 全连接跳转模式：'_blank'、'_self'、'_parent'
 	Weight     int    `json:"weight" gorm:"column:weight;type:int;default:0;comment:排序权重"`
+	
+	// Soybean-admin 格式字段
+	MenuType   string `json:"menuType,omitempty" gorm:"column:menu_type;type:varchar(10);default:'2';comment:菜单类型:1-目录,2-菜单"` // 菜单类型:1-目录,2-菜单
+	MenuName   string `json:"menuName,omitempty" gorm:"column:menu_name;type:varchar(100);comment:菜单名称"`                          // 菜单名称
+	RouteName  string `json:"routeName,omitempty" gorm:"column:route_name;type:varchar(100);comment:路由名称"`                      // 路由名称
+	RoutePath  string `json:"routePath,omitempty" gorm:"column:route_path;type:varchar(255);comment:路由路径"`                     // 路由路径
+	I18nKey    string `json:"i18nKey,omitempty" gorm:"column:i18n_key;type:varchar(100);comment:国际化key"`                        // 国际化key
+	IconType   string `json:"iconType,omitempty" gorm:"column:icon_type;type:varchar(10);default:'1';comment:图标类型:1-iconify,2-local"` // 图标类型:1-iconify,2-local
+	Order      int    `json:"order,omitempty" gorm:"column:order;type:int;default:0;comment:排序"`                                 // 排序
+	Status     string `json:"status,omitempty" gorm:"column:status;type:varchar(10);default:'1';comment:状态:1-启用,2-禁用"`          // 状态:1-启用,2-禁用
+	MultiTab   bool   `json:"multiTab,omitempty" gorm:"column:multi_tab;default:false;comment:是否多标签"`                          // 是否多标签
+	ActiveMenu string `json:"activeMenu,omitempty" gorm:"column:active_menu;type:varchar(100);comment:激活菜单"`                    // 激活菜单
+	Constant   bool   `json:"constant,omitempty" gorm:"column:constant;default:false;comment:是否常量"`                              // 是否常量
+	Href       string `json:"href,omitempty" gorm:"column:href;type:varchar(255);comment:外部链接"`                              // 外部链接
 }
 
 func (m *Menu) TableName() string {

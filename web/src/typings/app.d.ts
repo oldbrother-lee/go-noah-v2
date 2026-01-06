@@ -470,6 +470,115 @@ declare namespace App {
             title: string;
           };
         };
+        manage: {
+          common: {
+            status: {
+              enable: string;
+              disable: string;
+            };
+          };
+          menu: {
+            home: string;
+            title: string;
+            id: string;
+            parentId: string;
+            menuType: string;
+            menuName: string;
+            routeName: string;
+            routePath: string;
+            pathParam: string;
+            layout: string;
+            page: string;
+            i18nKey: string;
+            icon: string;
+            localIcon: string;
+            iconTypeTitle: string;
+            order: string;
+            constant: string;
+            keepAlive: string;
+            href: string;
+            hideInMenu: string;
+            activeMenu: string;
+            multiTab: string;
+            fixedIndexInTab: string;
+            query: string;
+            button: string;
+            buttonCode: string;
+            buttonDesc: string;
+            menuStatus: string;
+            addMenu: string;
+            addChildMenu: string;
+            editMenu: string;
+            type: {
+              directory: string;
+              menu: string;
+            };
+            iconType: {
+              iconify: string;
+              local: string;
+            };
+            form: Record<string, string>;
+          };
+          user: {
+            title: string;
+            username: string;
+            nickname: string;
+            email: string;
+            phone: string;
+            password: string;
+            roles: string;
+            createdAt: string;
+            addUser: string;
+            editUser: string;
+            form: {
+              username: string;
+              nickname: string;
+              password: string;
+              passwordPlaceholder: string;
+              passwordRequired: string;
+              email: string;
+              phone: string;
+              roles: string;
+            };
+          };
+          role: {
+            title: string;
+            roleName: string;
+            roleCode: string;
+            roleDesc: string;
+            roleStatus: string;
+            createdAt: string;
+            addRole: string;
+            editRole: string;
+            assignPermission: string;
+            menuPermission: string;
+            apiPermission: string;
+            buttonAuth: string;
+            menuAuth: string;
+            form: {
+              roleName: string;
+              roleCode: string;
+              roleDesc: string;
+              roleStatus: string;
+            };
+          };
+          api: {
+            title: string;
+            group: string;
+            name: string;
+            path: string;
+            method: string;
+            createdAt: string;
+            addApi: string;
+            editApi: string;
+            form: {
+              group: string;
+              name: string;
+              path: string;
+              method: string;
+            };
+          };
+        };
         home: {
           branchDesc: string;
           greeting: string;

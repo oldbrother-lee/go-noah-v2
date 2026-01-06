@@ -20,14 +20,29 @@ func AuthMiddleware(e *casbin.SyncedEnforcer) gin.HandlerFunc {
 			return
 		}
 		uid := v.(*jwt.MyCustomClaims).UserId
-		if convertor.ToString(uid) == model.AdminUserID {
-			// 防呆设计，超管跳过API权限检查
+		uidStr := convertor.ToString(uid)
+		
+		// 防呆设计：检查用户ID是否为1，或者用户是否有admin角色
+		if uidStr == model.AdminUserID {
+			// 用户ID为1，直接跳过权限检查
 			ctx.Next()
 			return
 		}
+		
+		// 检查用户是否有admin角色
+		roles, err := e.GetRolesForUser(uidStr)
+		if err == nil {
+			for _, role := range roles {
+				if role == model.AdminRole {
+					// 用户有admin角色，跳过API权限检查
+					ctx.Next()
+					return
+				}
+			}
+		}
 
 		// 获取请求的资源和操作
-		sub := convertor.ToString(uid)
+		sub := uidStr
 		obj := model.ApiResourcePrefix + ctx.Request.URL.Path
 		act := ctx.Request.Method
 

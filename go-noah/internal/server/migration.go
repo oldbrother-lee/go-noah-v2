@@ -37,12 +37,14 @@ func NewMigrateServer(
 	}
 }
 func (m *MigrateServer) Start(ctx context.Context) error {
-	m.db.Migrator().DropTable(
-		&model.AdminUser{},
-		&model.Menu{},
-		&model.Role{},
-		&model.Api{},
-	)
+	// 只执行 AutoMigrate，不删除表（安全模式）
+	// 如果需要删除表重建，请手动执行 DropTable
+	// m.db.Migrator().DropTable(
+	// 	&model.AdminUser{},
+	// 	&model.Menu{},
+	// 	&model.Role{},
+	// 	&model.Api{},
+	// )
 	if err := m.db.AutoMigrate(
 		&model.AdminUser{},
 		&model.Menu{},
@@ -52,6 +54,9 @@ func (m *MigrateServer) Start(ctx context.Context) error {
 		m.log.Error("user migrate error", zap.Error(err))
 		return err
 	}
+	
+	// 更新现有菜单数据：将旧字段映射到新字段
+	m.updateMenuData(ctx)
 	err := m.initialAdminUser(ctx)
 	if err != nil {
 		m.log.Error("initialAdminUser error", zap.Error(err))
@@ -85,19 +90,41 @@ func (m *MigrateServer) initialAdminUser(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = m.db.Create(&model.AdminUser{
-		Model:    gorm.Model{ID: 1},
-		Username: "admin",
-		Password: string(hashedPassword),
-		Nickname: "Admin",
-	}).Error
-	return m.db.Create(&model.AdminUser{
-		Model:    gorm.Model{ID: 2},
-		Username: "user",
-		Password: string(hashedPassword),
-		Nickname: "运营人员",
-	}).Error
-
+	
+	// 检查用户是否已存在，如果不存在则创建
+	var adminUser model.AdminUser
+	if err := m.db.Where("id = ?", 1).First(&adminUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if err := m.db.Create(&model.AdminUser{
+				Model:    gorm.Model{ID: 1},
+				Username: "admin",
+				Password: string(hashedPassword),
+				Nickname: "Admin",
+			}).Error; err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	
+	var userUser model.AdminUser
+	if err := m.db.Where("id = ?", 2).First(&userUser).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			if err := m.db.Create(&model.AdminUser{
+				Model:    gorm.Model{ID: 2},
+				Username: "user",
+				Password: string(hashedPassword),
+				Nickname: "运营人员",
+			}).Error; err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	
+	return nil
 }
 func (m *MigrateServer) initialRBAC(ctx context.Context) error {
 	roles := []model.Role{
@@ -105,8 +132,20 @@ func (m *MigrateServer) initialRBAC(ctx context.Context) error {
 		{Sid: "1000", Name: "运营人员"},
 		{Sid: "1001", Name: "访客"},
 	}
-	if err := m.db.Create(&roles).Error; err != nil {
-		return err
+	
+	// 只创建不存在的角色
+	for _, role := range roles {
+		var existingRole model.Role
+		if err := m.db.Where("sid = ? OR name = ?", role.Sid, role.Name).First(&existingRole).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				if err := m.db.Create(&role).Error; err != nil {
+					m.log.Warn("create role error", zap.String("sid", role.Sid), zap.Error(err))
+				}
+			} else {
+				m.log.Warn("check role error", zap.String("sid", role.Sid), zap.Error(err))
+			}
+		}
+		// 如果角色已存在，跳过创建
 	}
 	m.e.ClearPolicy()
 	err := m.e.SavePolicy()
@@ -205,27 +244,94 @@ func (m *MigrateServer) initialMenuData(ctx context.Context) error {
 		m.log.Error("json.Unmarshal error", zap.Error(err))
 		return err
 	}
-	menuListDb := make([]model.Menu, 0)
+	
+	// 只创建不存在的菜单
 	for _, item := range menuList {
-		menuListDb = append(menuListDb, model.Menu{
-			Model: gorm.Model{
-				ID: item.ID,
-			},
-			ParentID:   item.ParentID,
-			Path:       item.Path,
-			Title:      item.Title,
-			Name:       item.Name,
-			Component:  item.Component,
-			Locale:     item.Locale,
-			Weight:     item.Weight,
-			Icon:       item.Icon,
-			Redirect:   item.Redirect,
-			URL:        item.URL,
-			KeepAlive:  item.KeepAlive,
-			HideInMenu: item.HideInMenu,
-		})
+		var existingMenu model.Menu
+		if err := m.db.Where("id = ?", item.ID).First(&existingMenu).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				// 菜单不存在，创建新菜单
+				menu := model.Menu{
+					Model: gorm.Model{
+						ID: item.ID,
+					},
+					ParentID:   item.ParentID,
+					Path:       item.Path,
+					Title:      item.Title,
+					Name:       item.Name,
+					Component:  item.Component,
+					Locale:     item.Locale,
+					Weight:     item.Weight,
+					Icon:       item.Icon,
+					Redirect:   item.Redirect,
+					URL:        item.URL,
+					KeepAlive:  item.KeepAlive,
+					HideInMenu: item.HideInMenu,
+				}
+				if err := m.db.Create(&menu).Error; err != nil {
+					m.log.Warn("create menu error", zap.Uint("id", item.ID), zap.Error(err))
+				}
+			} else {
+				m.log.Warn("check menu error", zap.Uint("id", item.ID), zap.Error(err))
+			}
+		}
+		// 如果菜单已存在，跳过创建
 	}
-	return m.db.Create(&menuListDb).Error
+	
+	return nil
+}
+
+// updateMenuData 更新现有菜单数据，将旧字段映射到新字段
+func (m *MigrateServer) updateMenuData(ctx context.Context) error {
+	var menus []model.Menu
+	if err := m.db.Find(&menus).Error; err != nil {
+		return err
+	}
+	
+	for _, menu := range menus {
+		update := make(map[string]interface{})
+		
+		// 如果新字段为空，则从旧字段映射
+		if menu.MenuName == "" && menu.Title != "" {
+			update["menu_name"] = menu.Title
+		}
+		if menu.RouteName == "" && menu.Name != "" {
+			update["route_name"] = menu.Name
+		}
+		if menu.RoutePath == "" && menu.Path != "" {
+			update["route_path"] = menu.Path
+		}
+		if menu.I18nKey == "" && menu.Locale != "" {
+			update["i18n_key"] = menu.Locale
+		}
+		if menu.Order == 0 && menu.Weight != 0 {
+			update["order"] = menu.Weight
+		}
+		if menu.MenuType == "" {
+			// 检查是否有子菜单
+			var childCount int64
+			m.db.Model(&model.Menu{}).Where("parent_id = ?", menu.ID).Count(&childCount)
+			if childCount > 0 {
+				update["menu_type"] = "1" // 目录
+			} else {
+				update["menu_type"] = "2" // 菜单
+			}
+		}
+		if menu.Status == "" {
+			update["status"] = "1" // 默认启用
+		}
+		if menu.IconType == "" {
+			update["icon_type"] = "1" // 默认 iconify
+		}
+		
+		if len(update) > 0 {
+			if err := m.db.Model(&model.Menu{}).Where("id = ?", menu.ID).Updates(update).Error; err != nil {
+				m.log.Warn("update menu data error", zap.Uint("id", menu.ID), zap.Error(err))
+			}
+		}
+	}
+	
+	return nil
 }
 
 var menuData = `[

@@ -100,6 +100,47 @@ type GetMenuResponse struct {
 	Data GetMenuResponseData
 }
 
+// Soybean-admin 格式的菜单响应
+type SoybeanMenuDataItem struct {
+	ID         uint                   `json:"id,omitempty"`
+	CreateBy   string                 `json:"createBy,omitempty"`
+	CreateTime string                 `json:"createTime,omitempty"`
+	UpdateBy   string                 `json:"updateBy,omitempty"`
+	UpdateTime string                 `json:"updateTime,omitempty"`
+	Status     string                 `json:"status,omitempty"`
+	ParentID   uint                   `json:"parentId,omitempty"`
+	MenuType   string                 `json:"menuType,omitempty"`
+	MenuName   string                 `json:"menuName,omitempty"`
+	RouteName  string                 `json:"routeName,omitempty"`
+	RoutePath  string                 `json:"routePath,omitempty"`
+	Component  string                 `json:"component,omitempty"`
+	Order      int                    `json:"order,omitempty"`
+	I18nKey    string                 `json:"i18nKey,omitempty"`
+	Icon       string                 `json:"icon,omitempty"`
+	IconType   string                 `json:"iconType,omitempty"`
+	MultiTab   bool                   `json:"multiTab,omitempty"`
+	HideInMenu bool                   `json:"hideInMenu,omitempty"`
+	ActiveMenu string                 `json:"activeMenu,omitempty"`
+	KeepAlive  bool                   `json:"keepAlive,omitempty"`
+	Constant   bool                   `json:"constant,omitempty"`
+	Href       string                 `json:"href,omitempty"`
+	Query      []map[string]string    `json:"query,omitempty"`
+	Buttons    []map[string]string     `json:"buttons,omitempty"`
+	Children   []*SoybeanMenuDataItem  `json:"children,omitempty"`
+}
+
+type GetSoybeanMenuResponseData struct {
+	Records []*SoybeanMenuDataItem `json:"records"`
+	Current int                     `json:"current"`
+	Size    int                     `json:"size"`
+	Total   int                     `json:"total"`
+}
+
+type GetSoybeanMenuResponse struct {
+	Response
+	Data GetSoybeanMenuResponseData
+}
+
 type MenuCreateRequest struct {
 	ParentID   uint   `json:"parentId,omitempty"`   // 父级菜单的id，使用整数表示
 	Weight     int    `json:"weight"`               // 排序权重
@@ -113,7 +154,20 @@ type MenuCreateRequest struct {
 	KeepAlive  bool   `json:"keepAlive,omitempty"`  // 是否保活
 	HideInMenu bool   `json:"hideInMenu,omitempty"` // 是否保活
 	URL        string `json:"url,omitempty"`        // iframe模式下的跳转url，不能与path重复
-
+	
+	// Soybean-admin 格式字段
+	MenuType   string `json:"menuType,omitempty"`   // 菜单类型:1-目录,2-菜单
+	MenuName   string `json:"menuName,omitempty"`   // 菜单名称
+	RouteName  string `json:"routeName,omitempty"`  // 路由名称
+	RoutePath  string `json:"routePath,omitempty"`  // 路由路径
+	I18nKey    string `json:"i18nKey,omitempty"`    // 国际化key
+	IconType   string `json:"iconType,omitempty"`   // 图标类型:1-iconify,2-local
+	Order      int    `json:"order,omitempty"`      // 排序
+	Status     string `json:"status,omitempty"`     // 状态:1-启用,2-禁用
+	MultiTab   bool   `json:"multiTab,omitempty"`   // 是否多标签
+	ActiveMenu string `json:"activeMenu,omitempty"` // 激活菜单
+	Constant   bool   `json:"constant,omitempty"`   // 是否常量
+	Href       string `json:"href,omitempty"`       // 外部链接
 }
 type MenuUpdateRequest struct {
 	ID         uint   `json:"id,omitempty"`         // 唯一id，使用整数表示
@@ -130,6 +184,20 @@ type MenuUpdateRequest struct {
 	HideInMenu bool   `json:"hideInMenu,omitempty"` // 是否保活
 	URL        string `json:"url,omitempty"`        // iframe模式下的跳转url，不能与path重复
 	UpdatedAt  string `json:"updatedAt"`
+	
+	// Soybean-admin 格式字段
+	MenuType   string `json:"menuType,omitempty"`   // 菜单类型:1-目录,2-菜单
+	MenuName   string `json:"menuName,omitempty"`   // 菜单名称
+	RouteName  string `json:"routeName,omitempty"`  // 路由名称
+	RoutePath  string `json:"routePath,omitempty"`  // 路由路径
+	I18nKey    string `json:"i18nKey,omitempty"`    // 国际化key
+	IconType   string `json:"iconType,omitempty"`    // 图标类型:1-iconify,2-local
+	Order      int    `json:"order,omitempty"`      // 排序
+	Status     string `json:"status,omitempty"`     // 状态:1-启用,2-禁用
+	MultiTab   bool   `json:"multiTab,omitempty"`   // 是否多标签
+	ActiveMenu string `json:"activeMenu,omitempty"` // 激活菜单
+	Constant   bool   `json:"constant,omitempty"`   // 是否常量
+	Href       string `json:"href,omitempty"`       // 外部链接
 }
 type MenuDeleteRequest struct {
 	ID uint `form:"id"` // 唯一id，使用整数表示

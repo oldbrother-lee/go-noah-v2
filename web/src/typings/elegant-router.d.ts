@@ -34,6 +34,10 @@ declare module "@elegant-router/types" {
     "home": "/home";
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
+    "system": "/system";
+    "system_menu": "/system/menu";
+    "system_permission": "/system/permission";
+    "system_user": "/system/user";
   };
 
   /**
@@ -72,6 +76,7 @@ declare module "@elegant-router/types" {
     | "home"
     | "iframe-page"
     | "login"
+    | "system"
   >;
 
   /**
@@ -104,6 +109,9 @@ declare module "@elegant-router/types" {
     | "das_orders_dml"
     | "das_orders_export"
     | "home"
+    | "system_menu"
+    | "system_permission"
+    | "system_user"
   >;
 
   /**

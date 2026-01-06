@@ -185,7 +185,11 @@ const local: App.I18n.Schema = {
     das_orders_commit: 'Commit Order',
     das_orders_commit_ddl: 'DDL Order',
     das_orders_commit_dml: 'DML Order',
-    das_orders_commit_export: 'Export Order'
+    das_orders_commit_export: 'Export Order',
+    system: 'System Management',
+    system_menu: 'Menu Management',
+    system_user: 'User Management',
+    system_permission: 'Permission Management'
   },
   page: {
     login: {
@@ -262,6 +266,139 @@ const local: App.I18n.Schema = {
         desc5: 'Soybean just wrote some of the workbench pages casually, and it was enough to see!'
       },
       creativity: 'Creativity'
+    },
+    manage: {
+      common: {
+        status: {
+          enable: 'Enable',
+          disable: 'Disable'
+        }
+      },
+      menu: {
+        home: 'Home',
+        title: 'Menu List',
+        id: 'ID',
+        parentId: 'Parent Menu ID',
+        menuType: 'Menu Type',
+        menuName: 'Menu Name',
+        routeName: 'Route Name',
+        routePath: 'Route Path',
+        pathParam: 'Path Parameter',
+        layout: 'Layout',
+        page: 'Page Component',
+        i18nKey: 'i18n Key',
+        icon: 'Icon',
+        localIcon: 'Local Icon',
+        iconTypeTitle: 'Icon Type',
+        order: 'Order',
+        constant: 'Constant Route',
+        keepAlive: 'Keep Alive',
+        href: 'External Link',
+        hideInMenu: 'Hide in Menu',
+        activeMenu: 'Active Menu',
+        multiTab: 'Multi Tab',
+        fixedIndexInTab: 'Fixed Index in Tab',
+        query: 'Route Query',
+        button: 'Button',
+        buttonCode: 'Button Code',
+        buttonDesc: 'Button Description',
+        menuStatus: 'Menu Status',
+        addMenu: 'Add Menu',
+        addChildMenu: 'Add Child Menu',
+        editMenu: 'Edit Menu',
+        type: {
+          directory: 'Directory',
+          menu: 'Menu'
+        },
+        iconType: {
+          iconify: 'Iconify Icon',
+          local: 'Local Icon'
+        },
+        form: {
+          home: 'Please select home page',
+          menuType: 'Please select menu type',
+          menuName: 'Please enter menu name',
+          routeName: 'Please enter route name',
+          routePath: 'Please enter route path',
+          pathParam: 'Please enter path parameter',
+          page: 'Please select page component',
+          layout: 'Please select layout component',
+          i18nKey: 'Please enter i18n key',
+          icon: 'Please enter icon',
+          localIcon: 'Please select local icon',
+          order: 'Please enter order',
+          keepAlive: 'Please select whether to keep alive',
+          href: 'Please enter external link',
+          hideInMenu: 'Please select whether to hide in menu',
+          activeMenu: 'Please select active menu route name',
+          multiTab: 'Please select whether to support multi tab',
+          fixedInTab: 'Please select whether to fix in tab',
+          fixedIndexInTab: 'Please enter fixed index in tab',
+          queryKey: 'Please enter route query key',
+          queryValue: 'Please enter route query value',
+          buttonCode: 'Please enter button code',
+          buttonDesc: 'Please enter button description'
+        }
+      },
+      user: {
+        title: 'User List',
+        username: 'Username',
+        nickname: 'Nickname',
+        email: 'Email',
+        phone: 'Phone',
+        password: 'Password',
+        roles: 'Roles',
+        createdAt: 'Created At',
+        addUser: 'Add User',
+        editUser: 'Edit User',
+        form: {
+          username: 'Please enter username',
+          nickname: 'Please enter nickname',
+          password: 'Please enter password',
+          passwordPlaceholder: 'Leave blank to not change password',
+          passwordRequired: 'Password cannot be empty',
+          email: 'Please enter email',
+          phone: 'Please enter phone',
+          roles: 'Please select roles'
+        }
+      },
+      role: {
+        title: 'Role Management',
+        roleName: 'Role Name',
+        roleCode: 'Role Code',
+        roleDesc: 'Role Description',
+        roleStatus: 'Role Status',
+        createdAt: 'Created At',
+        addRole: 'Add Role',
+        editRole: 'Edit Role',
+        assignPermission: 'Assign Permission',
+        menuPermission: 'Menu Permission',
+        apiPermission: 'API Permission',
+        buttonAuth: 'Button Permission',
+        menuAuth: 'Menu Permission',
+        form: {
+          roleName: 'Please enter role name',
+          roleCode: 'Please enter role code',
+          roleDesc: 'Please enter role description',
+          roleStatus: 'Please select role status'
+        }
+      },
+      api: {
+        title: 'API Management',
+        group: 'Group',
+        name: 'Name',
+        path: 'Path',
+        method: 'Method',
+        createdAt: 'Created At',
+        addApi: 'Add API',
+        editApi: 'Edit API',
+        form: {
+          group: 'Please enter group',
+          name: 'Please enter name',
+          path: 'Please enter path',
+          method: 'Please select method'
+        }
+      }
     }
   },
   form: {

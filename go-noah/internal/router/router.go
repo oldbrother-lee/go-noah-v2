@@ -12,13 +12,20 @@ import (
 
 // InitRouter 初始化路由
 func InitRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logger *log.Logger) {
-	// 初始化各个模块的路由
+	// 添加 /api 前缀的路由组（兼容前端请求）
+	api := r.Group("/api")
+	{
+		InitAdminRouter(api, jwt, e, logger)
+		InitUserRouter(api, jwt, e, logger)
+	}
+
+	// 保持原有的 /v1 路由（向后兼容）
 	InitAdminRouter(r, jwt, e, logger)
 	InitUserRouter(r, jwt, e, logger)
 }
 
 // InitAdminRouter 初始化管理员相关路由
-func InitAdminRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logger *log.Logger) {
+func InitAdminRouter(r gin.IRouter, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logger *log.Logger) {
 	v1 := r.Group("/v1")
 	{
 		// No route group has permission
@@ -35,6 +42,9 @@ func InitAdminRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logg
 			strictAuthRouter.POST("/admin/menu", handler.AdminHandlerApp.MenuCreate)
 			strictAuthRouter.PUT("/admin/menu", handler.AdminHandlerApp.MenuUpdate)
 			strictAuthRouter.DELETE("/admin/menu", handler.AdminHandlerApp.MenuDelete)
+
+			// 获取当前用户信息（兼容前端调用）
+			strictAuthRouter.GET("/user", handler.AdminHandlerApp.GetAdminUser)
 
 			strictAuthRouter.GET("/admin/users", handler.AdminHandlerApp.GetAdminUsers)
 			strictAuthRouter.GET("/admin/user", handler.AdminHandlerApp.GetAdminUser)
@@ -58,7 +68,7 @@ func InitAdminRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logg
 }
 
 // InitUserRouter 初始化用户相关路由
-func InitUserRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logger *log.Logger) {
+func InitUserRouter(r gin.IRouter, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logger *log.Logger) {
 	v1 := r.Group("/v1")
 	{
 		// Strict permission routing group

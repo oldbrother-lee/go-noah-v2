@@ -330,7 +330,7 @@ func (s *AdminService) GetRolePermissions(ctx context.Context, role string) (*ap
 
 func (s *AdminService) MenuUpdate(ctx context.Context, req *api.MenuUpdateRequest) error {
 	repo := s.getAdminRepo()
-	return repo.MenuUpdate(ctx, &model.Menu{
+	menu := &model.Menu{
 		Component:  req.Component,
 		Icon:       req.Icon,
 		KeepAlive:  req.KeepAlive,
@@ -346,12 +346,54 @@ func (s *AdminService) MenuUpdate(ctx context.Context, req *api.MenuUpdateReques
 		Model: gorm.Model{
 			ID: req.ID,
 		},
-	})
+	}
+
+	// 映射 Soybean-admin 格式字段
+	if req.MenuType != "" {
+		menu.MenuType = req.MenuType
+	}
+	if req.MenuName != "" {
+		menu.MenuName = req.MenuName
+	} else if req.Title != "" {
+		menu.MenuName = req.Title
+	}
+	if req.RouteName != "" {
+		menu.RouteName = req.RouteName
+	} else if req.Name != "" {
+		menu.RouteName = req.Name
+	}
+	if req.RoutePath != "" {
+		menu.RoutePath = req.RoutePath
+	} else if req.Path != "" {
+		menu.RoutePath = req.Path
+	}
+	if req.I18nKey != "" {
+		menu.I18nKey = req.I18nKey
+	} else if req.Locale != "" {
+		menu.I18nKey = req.Locale
+	}
+	if req.IconType != "" {
+		menu.IconType = req.IconType
+	}
+	if req.Order > 0 {
+		menu.Order = req.Order
+	} else {
+		menu.Order = req.Weight
+	}
+	if req.Status != "" {
+		menu.Status = req.Status
+	}
+	menu.MultiTab = req.MultiTab
+	menu.ActiveMenu = req.ActiveMenu
+	menu.Constant = req.Constant
+	menu.Href = req.Href
+
+	return repo.MenuUpdate(ctx, menu)
 }
 
 func (s *AdminService) MenuCreate(ctx context.Context, req *api.MenuCreateRequest) error {
 	repo := s.getAdminRepo()
-	return repo.MenuCreate(ctx, &model.Menu{
+	menu := &model.Menu{
 		Component:  req.Component,
 		Icon:       req.Icon,
 		KeepAlive:  req.KeepAlive,
@@ -364,7 +406,55 @@ func (s *AdminService) MenuCreate(ctx context.Context, req *api.MenuCreateReques
 		Redirect:   req.Redirect,
 		Title:      req.Title,
 		URL:        req.URL,
-	})
+	}
+
+	// 映射 Soybean-admin 格式字段
+	if req.MenuType != "" {
+		menu.MenuType = req.MenuType
+	} else {
+		menu.MenuType = "2" // 默认菜单
+	}
+	if req.MenuName != "" {
+		menu.MenuName = req.MenuName
+	} else if req.Title != "" {
+		menu.MenuName = req.Title
+	}
+	if req.RouteName != "" {
+		menu.RouteName = req.RouteName
+	} else if req.Name != "" {
+		menu.RouteName = req.Name
+	}
+	if req.RoutePath != "" {
+		menu.RoutePath = req.RoutePath
+	} else if req.Path != "" {
+		menu.RoutePath = req.Path
+	}
+	if req.I18nKey != "" {
+		menu.I18nKey = req.I18nKey
+	} else if req.Locale != "" {
+		menu.I18nKey = req.Locale
+	}
+	if req.IconType != "" {
+		menu.IconType = req.IconType
+	} else {
+		menu.IconType = "1" // 默认 iconify
+	}
+	if req.Order > 0 {
+		menu.Order = req.Order
+	} else {
+		menu.Order = req.Weight
+	}
+	if req.Status != "" {
+		menu.Status = req.Status
+	} else {
+		menu.Status = "1" // 默认启用
+	}
+	menu.MultiTab = req.MultiTab
+	menu.ActiveMenu = req.ActiveMenu
+	menu.Constant = req.Constant
+	menu.Href = req.Href
+
+	return repo.MenuCreate(ctx, menu)
 }
 
 func (s *AdminService) MenuDelete(ctx context.Context, id uint) error {
@@ -450,6 +540,173 @@ func (s *AdminService) GetAdminMenus(ctx context.Context) (*api.GetMenuResponseD
 		})
 	}
 	return data, nil
+}
+
+// GetAdminMenusSoybean 获取管理员菜单（Soybean-admin格式）
+func (s *AdminService) GetAdminMenusSoybean(ctx context.Context) (*api.GetSoybeanMenuResponseData, error) {
+	repo := s.getAdminRepo()
+	menuList, err := repo.GetMenuList(ctx)
+	if err != nil {
+		global.Logger.WithContext(ctx).Error("GetMenuList error", zap.Error(err))
+		return nil, err
+	}
+
+	// 转换为map以便快速查找
+	menuMap := make(map[uint]*model.Menu)
+	for i := range menuList {
+		menuMap[menuList[i].ID] = &menuList[i]
+	}
+
+	// 构建树形结构
+	var rootMenus []*api.SoybeanMenuDataItem
+	for i := range menuList {
+		if menuList[i].ParentID == 0 {
+			rootMenus = append(rootMenus, s.convertMenuToSoybean(&menuList[i], menuMap))
+		}
+	}
+
+	// 排序根菜单
+	for i := 0; i < len(rootMenus)-1; i++ {
+		for j := i + 1; j < len(rootMenus); j++ {
+			if rootMenus[i].Order > rootMenus[j].Order {
+				rootMenus[i], rootMenus[j] = rootMenus[j], rootMenus[i]
+			}
+		}
+	}
+
+	// 扁平化所有菜单（包括子菜单）用于分页
+	allMenus := s.flattenMenuTree(rootMenus)
+
+	return &api.GetSoybeanMenuResponseData{
+		Records: allMenus,
+		Current: 1,
+		Size:    len(allMenus),
+		Total:   len(allMenus),
+	}, nil
+}
+
+// convertMenuToSoybean 将Menu转换为Soybean格式
+func (s *AdminService) convertMenuToSoybean(menu *model.Menu, menuMap map[uint]*model.Menu) *api.SoybeanMenuDataItem {
+	// 确定menuType：如果有子菜单，则为目录(1)，否则为菜单(2)
+	menuType := menu.MenuType
+	if menuType == "" {
+		// 检查是否有子菜单
+		hasChildren := false
+		for _, m := range menuMap {
+			if m.ParentID == menu.ID {
+				hasChildren = true
+				break
+			}
+		}
+		if hasChildren {
+			menuType = "1" // 目录
+		} else {
+			menuType = "2" // 菜单
+		}
+	}
+
+	// 确定routeName和routePath
+	routeName := menu.RouteName
+	if routeName == "" {
+		routeName = menu.Name
+	}
+	routePath := menu.RoutePath
+	if routePath == "" {
+		routePath = menu.Path
+	}
+
+	// 确定menuName
+	menuName := menu.MenuName
+	if menuName == "" {
+		menuName = menu.Title
+	}
+
+	// 确定i18nKey
+	i18nKey := menu.I18nKey
+	if i18nKey == "" && menu.Locale != "" {
+		i18nKey = menu.Locale
+	}
+
+	// 确定iconType
+	iconType := menu.IconType
+	if iconType == "" {
+		iconType = "1" // 默认iconify
+	}
+
+	// 确定status
+	status := menu.Status
+	if status == "" {
+		status = "1" // 默认启用
+	}
+
+	// 确定order
+	order := menu.Order
+	if order == 0 {
+		order = menu.Weight
+	}
+
+	item := &api.SoybeanMenuDataItem{
+		ID:         menu.ID,
+		CreateBy:   "",
+		CreateTime: menu.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdateBy:   "",
+		UpdateTime: menu.UpdatedAt.Format("2006-01-02 15:04:05"),
+		Status:     status,
+		ParentID:   menu.ParentID,
+		MenuType:   menuType,
+		MenuName:   menuName,
+		RouteName:  routeName,
+		RoutePath:  routePath,
+		Component:  menu.Component,
+		Order:      order,
+		I18nKey:    i18nKey,
+		Icon:       menu.Icon,
+		IconType:   iconType,
+		MultiTab:   menu.MultiTab,
+		HideInMenu: menu.HideInMenu,
+		ActiveMenu: menu.ActiveMenu,
+		KeepAlive:  menu.KeepAlive,
+		Constant:   menu.Constant,
+		Href:       menu.Href,
+		Query:      []map[string]string{},
+		Buttons:    []map[string]string{},
+		Children:   []*api.SoybeanMenuDataItem{},
+	}
+
+	// 查找并添加子菜单
+	for _, m := range menuMap {
+		if m.ParentID == menu.ID {
+			child := s.convertMenuToSoybean(m, menuMap)
+			item.Children = append(item.Children, child)
+		}
+	}
+
+	// 排序子菜单
+	for i := 0; i < len(item.Children)-1; i++ {
+		for j := i + 1; j < len(item.Children); j++ {
+			if item.Children[i].Order > item.Children[j].Order {
+				item.Children[i], item.Children[j] = item.Children[j], item.Children[i]
+			}
+		}
+	}
+
+	return item
+}
+
+// flattenMenuTree 扁平化菜单树
+func (s *AdminService) flattenMenuTree(menus []*api.SoybeanMenuDataItem) []*api.SoybeanMenuDataItem {
+	var result []*api.SoybeanMenuDataItem
+	for _, menu := range menus {
+		// 创建菜单副本（不包含children）
+		menuCopy := *menu
+		menuCopy.Children = nil
+		result = append(result, &menuCopy)
+		// 递归添加子菜单
+		if len(menu.Children) > 0 {
+			result = append(result, s.flattenMenuTree(menu.Children)...)
+		}
+	}
+	return result
 }
 
 func (s *AdminService) RoleUpdate(ctx context.Context, req *api.RoleUpdateRequest) error {

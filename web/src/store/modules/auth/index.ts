@@ -98,33 +98,37 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
    */
   async function login(userName: string, password: string, redirect = true) {
     startLoading();
-    const { data: loginToken, error, response } = await fetchLogin(userName, password);
+    const { data: loginToken, error } = await fetchLogin(userName, password);
 
-    // Fix: Handle flat response structure where data wrapper might be missing
-    let finalLoginToken = loginToken;
-    if (!finalLoginToken && !error && (response?.data as any)?.token) {
-      finalLoginToken = response.data as unknown as Api.Auth.LoginToken;
-    }
+    if (!error && loginToken) {
+      // 后端返回的是 { accessToken: string }，转换为统一的格式
+      const tokenToUse = loginToken.accessToken || loginToken.token;
+      if (tokenToUse) {
+        const tokenData: Api.Auth.LoginToken = {
+          accessToken: tokenToUse,
+          token: tokenToUse
+        };
+        const pass = await loginByToken(tokenData);
 
-    if (!error && finalLoginToken) {
-      const pass = await loginByToken(finalLoginToken);
+        if (pass) {
+          // Check if the tab needs to be cleared
+          const isClear = checkTabClear();
+          let needRedirect = redirect;
 
-      if (pass) {
-        // Check if the tab needs to be cleared
-        const isClear = checkTabClear();
-        let needRedirect = redirect;
+          if (isClear) {
+            // If the tab needs to be cleared,it means we don't need to redirect.
+            needRedirect = false;
+          }
+          await redirectFromLogin(needRedirect);
 
-        if (isClear) {
-          // If the tab needs to be cleared,it means we don't need to redirect.
-          needRedirect = false;
+          window.$notification?.success({
+            title: $t('page.login.common.loginSuccess'),
+            content: $t('page.login.common.welcomeBack', { userName: userInfo.userName }),
+            duration: 4500
+          });
         }
-        await redirectFromLogin(needRedirect);
-
-        window.$notification?.success({
-          title: $t('page.login.common.loginSuccess'),
-          content: $t('page.login.common.welcomeBack', { userName: userInfo.userName }),
-          duration: 4500
-        });
+      } else {
+        resetStore();
       }
     } else {
       resetStore();
@@ -135,16 +139,19 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
 
   async function loginByToken(loginToken: Api.Auth.LoginToken) {
     // 1. stored in the localStorage, the later requests need it in headers
-    localStg.set('token', loginToken.token);
-    // localStg.set('refreshToken', loginToken.refreshToken);
+    const tokenToStore = loginToken.accessToken || loginToken.token;
+    if (tokenToStore) {
+      localStg.set('token', tokenToStore);
+      // localStg.set('refreshToken', loginToken.refreshToken);
 
-    // 2. get user info
-    const pass = await getUserInfo();
-    // console.log("token", loginToken.token)
-    if (pass) {
-      token.value = loginToken.token;
+      // 2. get user info
+      const pass = await getUserInfo();
+      // console.log("token", tokenToStore)
+      if (pass) {
+        token.value = tokenToStore;
 
-      return true;
+        return true;
+      }
     }
 
     return false;

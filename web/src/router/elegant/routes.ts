@@ -206,5 +206,43 @@ export const generatedRoutes: GeneratedRoute[] = [
       constant: true,
       hideInMenu: true
     }
+  },
+  {
+    name: 'system',
+    path: '/system',
+    component: 'layout.base',
+    meta: {
+      title: 'system',
+      i18nKey: 'route.system'
+    },
+    children: [
+      {
+        name: 'system_menu',
+        path: '/system/menu',
+        component: 'view.system_menu',
+        meta: {
+          title: 'system_menu',
+          i18nKey: 'route.system_menu'
+        }
+      },
+      {
+        name: 'system_permission',
+        path: '/system/permission',
+        component: 'view.system_permission',
+        meta: {
+          title: 'system_permission',
+          i18nKey: 'route.system_permission'
+        }
+      },
+      {
+        name: 'system_user',
+        path: '/system/user',
+        component: 'view.system_user',
+        meta: {
+          title: 'system_user',
+          i18nKey: 'route.system_user'
+        }
+      }
+    ]
   }
 ];

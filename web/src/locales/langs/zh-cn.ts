@@ -186,9 +186,146 @@ const local: App.I18n.Schema = {
     das_orders_commit: '提交工单',
     das_orders_commit_ddl: 'DDL工单',
     das_orders_commit_dml: 'DML工单',
-    das_orders_commit_export: '导出工单'
+    das_orders_commit_export: '导出工单',
+    system: '系统管理',
+    system_menu: '菜单管理',
+    system_user: '用户管理',
+    system_permission: '权限管理'
   },
   page: {
+    manage: {
+      common: {
+        status: {
+          enable: '启用',
+          disable: '禁用'
+        }
+      },
+      menu: {
+        home: '首页',
+        title: '菜单列表',
+        id: 'ID',
+        parentId: '父级菜单ID',
+        menuType: '菜单类型',
+        menuName: '菜单名称',
+        routeName: '路由名称',
+        routePath: '路由路径',
+        pathParam: '路径参数',
+        layout: '布局',
+        page: '页面组件',
+        i18nKey: '国际化key',
+        icon: '图标',
+        localIcon: '本地图标',
+        iconTypeTitle: '图标类型',
+        order: '排序',
+        constant: '常量路由',
+        keepAlive: '缓存路由',
+        href: '外链',
+        hideInMenu: '隐藏菜单',
+        activeMenu: '高亮的菜单',
+        multiTab: '支持多页签',
+        fixedIndexInTab: '固定在页签中的序号',
+        query: '路由参数',
+        button: '按钮',
+        buttonCode: '按钮编码',
+        buttonDesc: '按钮描述',
+        menuStatus: '菜单状态',
+        addMenu: '新增菜单',
+        addChildMenu: '新增子菜单',
+        editMenu: '编辑菜单',
+        type: {
+          directory: '目录',
+          menu: '菜单'
+        },
+        iconType: {
+          iconify: 'Iconify图标',
+          local: '本地图标'
+        },
+        form: {
+          home: '请选择首页',
+          menuType: '请选择菜单类型',
+          menuName: '请输入菜单名称',
+          routeName: '请输入路由名称',
+          routePath: '请输入路由路径',
+          pathParam: '请输入路径参数',
+          page: '请选择页面组件',
+          layout: '请选择布局组件',
+          i18nKey: '请输入国际化key',
+          icon: '请输入图标',
+          localIcon: '请选择本地图标',
+          order: '请输入排序',
+          keepAlive: '请选择是否缓存路由',
+          href: '请输入外链',
+          hideInMenu: '请选择是否隐藏菜单',
+          activeMenu: '请选择高亮的菜单的路由名称',
+          multiTab: '请选择是否支持多标签',
+          fixedInTab: '请选择是否固定在页签中',
+          fixedIndexInTab: '请输入固定在页签中的序号',
+          queryKey: '请输入路由参数Key',
+          queryValue: '请输入路由参数Value',
+          buttonCode: '请输入按钮编码',
+          buttonDesc: '请输入按钮描述'
+        }
+      },
+      user: {
+        title: '用户列表',
+        username: '用户名',
+        nickname: '昵称',
+        email: '邮箱',
+        phone: '手机号',
+        password: '密码',
+        roles: '角色',
+        createdAt: '创建时间',
+        addUser: '添加用户',
+        editUser: '编辑用户',
+        form: {
+          username: '请输入用户名',
+          nickname: '请输入昵称',
+          password: '请输入密码',
+          passwordPlaceholder: '留空则不修改密码',
+          passwordRequired: '密码不能为空',
+          email: '请输入邮箱',
+          phone: '请输入手机号',
+          roles: '请选择角色'
+        }
+      },
+      role: {
+        title: '角色管理',
+        roleName: '角色名称',
+        roleCode: '角色编码',
+        roleDesc: '角色描述',
+        roleStatus: '角色状态',
+        createdAt: '创建时间',
+        addRole: '新增角色',
+        editRole: '编辑角色',
+        assignPermission: '分配权限',
+        menuPermission: '菜单权限',
+        apiPermission: 'API权限',
+        buttonAuth: '按钮权限',
+        menuAuth: '菜单权限',
+        form: {
+          roleName: '请输入角色名称',
+          roleCode: '请输入角色编码',
+          roleDesc: '请输入角色描述',
+          roleStatus: '请选择角色状态'
+        }
+      },
+      api: {
+        title: 'API管理',
+        group: '分组',
+        name: '名称',
+        path: '路径',
+        method: '请求方法',
+        createdAt: '创建时间',
+        addApi: '新增API',
+        editApi: '编辑API',
+        form: {
+          group: '请输入分组',
+          name: '请输入名称',
+          path: '请输入路径',
+          method: '请选择请求方法'
+        }
+      }
+    },
     login: {
       common: {
         loginOrRegister: '登录 / 注册',
