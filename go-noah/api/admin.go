@@ -295,3 +295,42 @@ type UpdateRolePermissionRequest struct {
 	List []string `form:"list" binding:"required" example:""`
 }
 
+// ==================== 动态路由 ====================
+
+// ElegantRouteMeta 路由元信息（soybean-admin格式）
+type ElegantRouteMeta struct {
+	Title         string `json:"title,omitempty"`
+	I18nKey       string `json:"i18nKey,omitempty"`
+	Icon          string `json:"icon,omitempty"`
+	Order         int    `json:"order,omitempty"`
+	KeepAlive     bool   `json:"keepAlive,omitempty"`
+	Constant      bool   `json:"constant,omitempty"`
+	HideInMenu    bool   `json:"hideInMenu,omitempty"`
+	ActiveMenu    string `json:"activeMenu,omitempty"`
+	MultiTab      bool   `json:"multiTab,omitempty"`
+	FixedIndexInTab *int `json:"fixedIndexInTab,omitempty"`
+	Href          string `json:"href,omitempty"`
+}
+
+// ElegantRoute 路由项（soybean-admin格式）
+type ElegantRoute struct {
+	Name      string          `json:"name"`
+	Path      string          `json:"path"`
+	Component string          `json:"component,omitempty"`
+	Redirect  string          `json:"redirect,omitempty"`
+	Meta      ElegantRouteMeta `json:"meta"`
+	Children  []ElegantRoute  `json:"children,omitempty"`
+}
+
+// UserRouteData 用户路由数据
+type UserRouteData struct {
+	Routes []ElegantRoute `json:"routes"`
+	Home   string         `json:"home"`
+}
+
+// GetUserRoutesResponse 获取用户路由响应
+type GetUserRoutesResponse struct {
+	Response
+	Data UserRouteData `json:"data"`
+}
+

@@ -80,6 +80,104 @@ func (h *AdminHandler) GetAdminMenus(ctx *gin.Context) {
 	api.HandleSuccess(ctx, data)
 }
 
+// GetUserRoutes godoc
+// @Summary 获取用户动态路由
+// @Schemes
+// @Description 获取当前用户的动态路由（soybean-admin格式）
+// @Tags 路由模块
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} api.GetUserRoutesResponse
+// @Router /route/getUserRoutes [get]
+func (h *AdminHandler) GetUserRoutes(ctx *gin.Context) {
+	data, err := service.AdminServiceApp.GetUserRoutes(ctx, GetUserIdFromCtx(ctx))
+	if err != nil {
+		api.HandleError(ctx, http.StatusBadRequest, api.ErrBadRequest, nil)
+		return
+	}
+	api.HandleSuccess(ctx, data)
+}
+
+// GetConstantRoutes godoc
+// @Summary 获取常量路由
+// @Schemes
+// @Description 获取不需要权限的常量路由
+// @Tags 路由模块
+// @Accept json
+// @Produce json
+// @Success 200 {object} api.Response
+// @Router /route/getConstantRoutes [get]
+func (h *AdminHandler) GetConstantRoutes(ctx *gin.Context) {
+	// 常量路由：登录页、404等不需要权限的路由
+	constantRoutes := []map[string]interface{}{
+		{
+			"name":      "login",
+			"path":      "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?",
+			"component": "layout.blank$view.login",
+			"props":     true,
+			"meta": map[string]interface{}{
+				"title":      "login",
+				"i18nKey":    "route.login",
+				"constant":   true,
+				"hideInMenu": true,
+			},
+		},
+		{
+			"name":      "403",
+			"path":      "/403",
+			"component": "layout.blank$view.403",
+			"meta": map[string]interface{}{
+				"title":      "403",
+				"i18nKey":    "route.403",
+				"constant":   true,
+				"hideInMenu": true,
+			},
+		},
+		{
+			"name":      "404",
+			"path":      "/404",
+			"component": "layout.blank$view.404",
+			"meta": map[string]interface{}{
+				"title":      "404",
+				"i18nKey":    "route.404",
+				"constant":   true,
+				"hideInMenu": true,
+			},
+		},
+		{
+			"name":      "500",
+			"path":      "/500",
+			"component": "layout.blank$view.500",
+			"meta": map[string]interface{}{
+				"title":      "500",
+				"i18nKey":    "route.500",
+				"constant":   true,
+				"hideInMenu": true,
+			},
+		},
+	}
+	api.HandleSuccess(ctx, constantRoutes)
+}
+
+// IsRouteExist godoc
+// @Summary 检查路由是否存在
+// @Schemes
+// @Description 检查指定路由名称是否存在
+// @Tags 路由模块
+// @Accept json
+// @Produce json
+// @Param routeName query string true "路由名称"
+// @Security Bearer
+// @Success 200 {object} api.Response
+// @Router /route/isRouteExist [get]
+func (h *AdminHandler) IsRouteExist(ctx *gin.Context) {
+	routeName := ctx.Query("routeName")
+	// 简单实现：总是返回 true，表示路由存在
+	// 实际应用中可以根据需求查询数据库
+	api.HandleSuccess(ctx, routeName != "")
+}
+
 // GetUserPermissions godoc
 // @Summary 获取用户权限
 // @Schemes

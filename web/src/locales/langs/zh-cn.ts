@@ -168,7 +168,6 @@ const local: App.I18n.Schema = {
     'iframe-page': '外链页面',
     home: '首页',
     das: '数据库服务',
-    das_modules: 'DAS模块',
     das_modules_edit: 'SQL查询',
     das_modules_favorite: '收藏SQL',
     das_modules_history: '历史查询',

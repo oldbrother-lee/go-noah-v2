@@ -542,7 +542,7 @@ func (s *AdminService) GetAdminMenus(ctx context.Context) (*api.GetMenuResponseD
 	return data, nil
 }
 
-// GetAdminMenusSoybean 获取管理员菜单（Soybean-admin格式）
+// GetAdminMenusSoybean 获取管理员菜单
 func (s *AdminService) GetAdminMenusSoybean(ctx context.Context) (*api.GetSoybeanMenuResponseData, error) {
 	repo := s.getAdminRepo()
 	menuList, err := repo.GetMenuList(ctx)
@@ -769,4 +769,234 @@ func (s *AdminService) GetRoles(ctx context.Context, req *api.GetRoleListRequest
 
 	}
 	return data, nil
+}
+
+// GetUserRoutes 获取用户动态路由
+func (s *AdminService) GetUserRoutes(ctx context.Context, uid uint) (*api.UserRouteData, error) {
+	repo := s.getAdminRepo()
+	menuList, err := repo.GetMenuList(ctx)
+	if err != nil {
+		global.Logger.WithContext(ctx).Error("GetMenuList error", zap.Error(err))
+		return nil, err
+	}
+
+	// 获取用户权限的菜单
+	permissions, err := repo.GetUserPermissions(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	menuPermMap := map[string]struct{}{}
+	for _, permission := range permissions {
+		// 超管可以看到所有菜单
+		if convertor.ToString(uid) == model.AdminUserID {
+			menuPermMap[strings.TrimPrefix(permission[1], model.MenuResourcePrefix)] = struct{}{}
+		} else {
+			if len(permission) == 3 && strings.HasPrefix(permission[1], model.MenuResourcePrefix) {
+				menuPermMap[strings.TrimPrefix(permission[1], model.MenuResourcePrefix)] = struct{}{}
+			}
+		}
+	}
+
+	// 转换为map以便快速查找
+	menuMap := make(map[uint]*model.Menu)
+	for i := range menuList {
+		menuMap[menuList[i].ID] = &menuList[i]
+	}
+
+	// 构建树形结构（只包含有权限的菜单）
+	rootRoutes := make([]api.ElegantRoute, 0)
+
+	// 超管直接获取所有顶级菜单
+	isAdmin := convertor.ToString(uid) == model.AdminUserID
+
+	for i := range menuList {
+		menu := &menuList[i]
+
+		// 超管可以看到所有菜单
+		if !isAdmin {
+			// 检查菜单权限
+			routePath := menu.RoutePath
+			if routePath == "" {
+				routePath = menu.Path
+			}
+			if _, ok := menuPermMap[routePath]; !ok {
+				continue
+			}
+		}
+
+		if menu.ParentID == 0 {
+			route := s.convertMenuToElegantRoute(menu, menuMap, menuPermMap, isAdmin)
+			rootRoutes = append(rootRoutes, route)
+		}
+	}
+
+	// 排序根路由
+	for i := 0; i < len(rootRoutes)-1; i++ {
+		for j := i + 1; j < len(rootRoutes); j++ {
+			if rootRoutes[i].Meta.Order > rootRoutes[j].Meta.Order {
+				rootRoutes[i], rootRoutes[j] = rootRoutes[j], rootRoutes[i]
+			}
+		}
+	}
+
+	// 确定首页路由
+	home := "home"
+	if len(rootRoutes) > 0 {
+		// 优先查找名为 home 的路由
+		foundHome := false
+		for _, route := range rootRoutes {
+			if route.Name == "home" {
+				home = route.Name
+				foundHome = true
+				break
+			}
+		}
+		// 如果没有 home 路由，查找第一个一级页面（有 layout 且有 view 的）
+		if !foundHome {
+			for _, route := range rootRoutes {
+				if strings.Contains(route.Component, "$view.") {
+					home = route.Name
+					foundHome = true
+					break
+				}
+			}
+		}
+		// 如果还是没有，用第一个路由
+		if !foundHome && len(rootRoutes) > 0 {
+			home = rootRoutes[0].Name
+		}
+	}
+
+	return &api.UserRouteData{
+		Routes: rootRoutes,
+		Home:   home,
+	}, nil
+}
+
+// convertMenuToElegantRoute 将菜单转换为 ElegantRoute 格式
+func (s *AdminService) convertMenuToElegantRoute(menu *model.Menu, menuMap map[uint]*model.Menu, menuPermMap map[string]struct{}, isAdmin bool) api.ElegantRoute {
+	// 确定基础 routeName
+	baseRouteName := menu.RouteName
+	if baseRouteName == "" {
+		baseRouteName = menu.Name
+	}
+
+	// 确定最终的 routeName（子菜单需要加上父级前缀）
+	routeName := baseRouteName
+	if menu.ParentID != 0 {
+		if parent, ok := menuMap[menu.ParentID]; ok {
+			parentRouteName := parent.RouteName
+			if parentRouteName == "" {
+				parentRouteName = parent.Name
+			}
+			// 如果 routeName 还没有父级前缀，添加它
+			if !strings.HasPrefix(routeName, parentRouteName+"_") {
+				routeName = parentRouteName + "_" + baseRouteName
+			}
+		}
+	}
+
+	// 确定routePath
+	routePath := menu.RoutePath
+	if routePath == "" {
+		routePath = menu.Path
+	}
+
+	// 确定title
+	title := menu.MenuName
+	if title == "" {
+		title = menu.Title
+	}
+
+	// 确定i18nKey - 使用 routeName 生成
+	i18nKey := menu.I18nKey
+	if i18nKey == "" && menu.Locale != "" {
+		i18nKey = menu.Locale
+	}
+	if i18nKey == "" {
+		i18nKey = "route." + routeName
+	}
+
+	// 确定order
+	order := menu.Order
+	if order == 0 {
+		order = menu.Weight
+	}
+
+	// 检查是否有子菜单
+	hasChildren := false
+	for _, m := range menuMap {
+		if m.ParentID == menu.ID {
+			hasChildren = true
+			break
+		}
+	}
+
+	// 智能生成 component
+	component := menu.Component
+	if component == "" || !strings.Contains(component, ".") {
+		if menu.ParentID == 0 {
+			// 顶级菜单
+			if hasChildren {
+				// 有子菜单，只需要 layout
+				component = "layout.base"
+			} else {
+				// 没有子菜单，一级页面
+				component = "layout.base$view." + routeName
+			}
+		} else {
+			// 子菜单，使用 view.{routeName} 格式
+			component = "view." + routeName
+		}
+	}
+
+	route := api.ElegantRoute{
+		Name:      routeName,
+		Path:      routePath,
+		Component: component,
+		Redirect:  menu.Redirect,
+		Meta: api.ElegantRouteMeta{
+			Title:      title,
+			I18nKey:    i18nKey,
+			Icon:       menu.Icon,
+			Order:      order,
+			KeepAlive:  menu.KeepAlive,
+			Constant:   menu.Constant,
+			HideInMenu: menu.HideInMenu,
+			ActiveMenu: menu.ActiveMenu,
+			MultiTab:   menu.MultiTab,
+			Href:       menu.Href,
+		},
+		Children: []api.ElegantRoute{},
+	}
+
+	// 查找并添加子菜单
+	for _, m := range menuMap {
+		if m.ParentID == menu.ID {
+			// 超管跳过权限检查
+			if !isAdmin {
+				childRoutePath := m.RoutePath
+				if childRoutePath == "" {
+					childRoutePath = m.Path
+				}
+				if _, ok := menuPermMap[childRoutePath]; !ok {
+					continue
+				}
+			}
+			child := s.convertMenuToElegantRoute(m, menuMap, menuPermMap, isAdmin)
+			route.Children = append(route.Children, child)
+		}
+	}
+
+	// 排序子菜单
+	for i := 0; i < len(route.Children)-1; i++ {
+		for j := i + 1; j < len(route.Children); j++ {
+			if route.Children[i].Meta.Order > route.Children[j].Meta.Order {
+				route.Children[i], route.Children[j] = route.Children[j], route.Children[i]
+			}
+		}
+	}
+
+	return route
 }

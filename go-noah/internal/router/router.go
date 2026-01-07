@@ -65,6 +65,19 @@ func InitAdminRouter(r gin.IRouter, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logg
 			strictAuthRouter.DELETE("/admin/api", handler.AdminHandlerApp.ApiDelete)
 		}
 	}
+
+	// 动态路由接口（soybean-admin格式）
+	// 不需要认证的路由
+	routeNoAuth := r.Group("/route")
+	{
+		routeNoAuth.GET("/getConstantRoutes", handler.AdminHandlerApp.GetConstantRoutes)
+	}
+	// 需要认证的路由
+	routeAuth := r.Group("/route").Use(middleware.StrictAuth(jwt, logger))
+	{
+		routeAuth.GET("/getUserRoutes", handler.AdminHandlerApp.GetUserRoutes)
+		routeAuth.GET("/isRouteExist", handler.AdminHandlerApp.IsRouteExist)
+	}
 }
 
 // InitUserRouter 初始化用户相关路由
