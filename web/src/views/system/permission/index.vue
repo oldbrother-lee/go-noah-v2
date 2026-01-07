@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { NButton, NPopconfirm, NTag, NTabPane, NTabs } from 'naive-ui';
 import {
   fetchGetRoles,
@@ -30,8 +30,7 @@ const {
   data: roleData,
   loading: roleLoading,
   pagination: rolePagination,
-  getData: getRoleData,
-  getDataByPage: getRoleDataByPage
+  getData: getRoleData
 } = useTable({
   apiFn: () => fetchGetRoles(roleSearchParams),
   transformer: res => {
@@ -122,6 +121,20 @@ const roleDrawerVisible = ref(false);
 const roleOperateType = ref<NaiveUI.TableOperateType>('add');
 const roleEditingData = ref<Api.Admin.Role | null>(null);
 
+// 自定义分页，支持手动更新搜索参数
+const roleTablePagination = computed(() => ({
+  ...rolePagination,
+  onUpdatePage: (page: number) => {
+    roleSearchParams.page = page;
+    getRoleData();
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    roleSearchParams.page = 1;
+    roleSearchParams.pageSize = pageSize;
+    getRoleData();
+  }
+}));
+
 function handleAddRole() {
   roleOperateType.value = 'add';
   roleEditingData.value = null;
@@ -146,7 +159,7 @@ async function handleDeleteRole(id: number) {
 
 function handleRoleSubmitted() {
   roleDrawerVisible.value = false;
-  getRoleDataByPage();
+  getRoleData();
 }
 
 // 权限分配
@@ -174,8 +187,7 @@ const {
   data: apiData,
   loading: apiLoading,
   pagination: apiPagination,
-  getData: getApiData,
-  getDataByPage: getApiDataByPage
+  getData: getApiData
 } = useTable({
   apiFn: () => fetchGetApis(apiSearchParams),
   transformer: res => {
@@ -283,6 +295,20 @@ const apiDrawerVisible = ref(false);
 const apiOperateType = ref<NaiveUI.TableOperateType>('add');
 const apiEditingData = ref<Api.Admin.Api | null>(null);
 
+// 自定义分页，支持手动更新搜索参数
+const apiTablePagination = computed(() => ({
+  ...apiPagination,
+  onUpdatePage: (page: number) => {
+    apiSearchParams.page = page;
+    getApiData();
+  },
+  onUpdatePageSize: (pageSize: number) => {
+    apiSearchParams.page = 1;
+    apiSearchParams.pageSize = pageSize;
+    getApiData();
+  }
+}));
+
 function handleAddApi() {
   apiOperateType.value = 'add';
   apiEditingData.value = null;
@@ -307,13 +333,13 @@ async function handleDeleteApi(id: number) {
 
 function handleApiSubmitted() {
   apiDrawerVisible.value = false;
-  getApiDataByPage();
+  getApiData();
 }
 </script>
 
 <template>
-  <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <NCard :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
+  <div class="flex-col-stretch gap-16px lt-sm:overflow-auto">
+    <NCard :bordered="false" size="small" class="card-wrapper">
       <NTabs type="line" animated>
         <!-- 角色管理 Tab -->
         <NTabPane name="role" :tab="$t('page.manage.role.title')">
@@ -353,7 +379,8 @@ function handleApiSubmitted() {
                           () => {
                             roleSearchParams.name = '';
                             roleSearchParams.sid = '';
-                            getRoleDataByPage(1);
+                            roleSearchParams.page = 1;
+                            getRoleData();
                           }
                         "
                       >
@@ -362,7 +389,7 @@ function handleApiSubmitted() {
                         </template>
                         {{ $t('common.reset') }}
                       </NButton>
-                      <NButton type="primary" ghost @click="getRoleDataByPage(1)">
+                      <NButton type="primary" ghost @click="() => { roleSearchParams.page = 1; getRoleData(); }">
                         <template #icon>
                           <icon-ic-round-search class="text-icon" />
                         </template>
@@ -394,7 +421,7 @@ function handleApiSubmitted() {
                 :loading="roleLoading"
                 remote
                 :row-key="row => row.id"
-                :pagination="rolePagination"
+                :pagination="roleTablePagination"
               />
             </NCard>
           </div>
@@ -470,7 +497,8 @@ function handleApiSubmitted() {
                             apiSearchParams.name = '';
                             apiSearchParams.path = '';
                             apiSearchParams.method = '';
-                            getApiDataByPage(1);
+                            apiSearchParams.page = 1;
+                            getApiData();
                           }
                         "
                       >
@@ -479,7 +507,7 @@ function handleApiSubmitted() {
                         </template>
                         {{ $t('common.reset') }}
                       </NButton>
-                      <NButton type="primary" ghost @click="getApiDataByPage(1)">
+                      <NButton type="primary" ghost @click="() => { apiSearchParams.page = 1; getApiData(); }">
                         <template #icon>
                           <icon-ic-round-search class="text-icon" />
                         </template>
@@ -511,7 +539,7 @@ function handleApiSubmitted() {
                 :loading="apiLoading"
                 remote
                 :row-key="row => row.id"
-                :pagination="apiPagination"
+                :pagination="apiTablePagination"
               />
             </NCard>
           </div>

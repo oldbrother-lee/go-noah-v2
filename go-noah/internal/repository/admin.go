@@ -230,6 +230,13 @@ func (r *AdminRepository) ApiDelete(ctx context.Context, id uint) error {
 	return r.DB(ctx).Where("id = ?", id).Delete(&model.Api{}).Error
 }
 
+// CheckApiExists 检查 API 是否已存在（基于 path + method）
+func (r *AdminRepository) CheckApiExists(ctx context.Context, path, method string) (bool, error) {
+	var count int64
+	err := r.DB(ctx).Model(&model.Api{}).Where("path = ? AND method = ?", path, method).Count(&count).Error
+	return count > 0, err
+}
+
 func (r *AdminRepository) GetUserPermissions(ctx context.Context, uid uint) ([][]string, error) {
 	return r.e.GetImplicitPermissionsForUser(convertor.ToString(uid))
 

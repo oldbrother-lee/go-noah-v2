@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/casbin/casbin/v2"
-	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
-	"net/http"
 	"go-noah/api"
 	"go-noah/internal/model"
 	"go-noah/pkg/log"
 	"go-noah/pkg/sid"
+	"net/http"
 	"os"
+
+	"github.com/casbin/casbin/v2"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type MigrateServer struct {
@@ -54,7 +55,7 @@ func (m *MigrateServer) Start(ctx context.Context) error {
 		m.log.Error("user migrate error", zap.Error(err))
 		return err
 	}
-	
+
 	// 更新现有菜单数据：将旧字段映射到新字段
 	m.updateMenuData(ctx)
 	err := m.initialAdminUser(ctx)
@@ -90,7 +91,7 @@ func (m *MigrateServer) initialAdminUser(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// 检查用户是否已存在，如果不存在则创建
 	var adminUser model.AdminUser
 	if err := m.db.Where("id = ?", 1).First(&adminUser).Error; err != nil {
@@ -107,7 +108,7 @@ func (m *MigrateServer) initialAdminUser(ctx context.Context) error {
 			return err
 		}
 	}
-	
+
 	var userUser model.AdminUser
 	if err := m.db.Where("id = ?", 2).First(&userUser).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -123,7 +124,7 @@ func (m *MigrateServer) initialAdminUser(ctx context.Context) error {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 func (m *MigrateServer) initialRBAC(ctx context.Context) error {
@@ -132,7 +133,7 @@ func (m *MigrateServer) initialRBAC(ctx context.Context) error {
 		{Sid: "1000", Name: "运营人员"},
 		{Sid: "1001", Name: "访客"},
 	}
-	
+
 	// 只创建不存在的角色
 	for _, role := range roles {
 		var existingRole model.Role
@@ -206,36 +207,11 @@ func (m *MigrateServer) addPermissionForRole(role, resource, action string) {
 	fmt.Printf("为角色 %s 添加权限: %s %s\n", role, resource, action)
 }
 func (m *MigrateServer) initialApisData(ctx context.Context) error {
-	initialApis := []model.Api{
-
-		{Group: "基础API", Name: "获取用户菜单列表", Path: "/v1/menus", Method: http.MethodGet},
-		{Group: "基础API", Name: "获取管理员信息", Path: "/v1/admin/user", Method: http.MethodGet},
-
-		{Group: "菜单管理", Name: "获取管理菜单", Path: "/v1/admin/menus", Method: http.MethodGet},
-		{Group: "菜单管理", Name: "创建菜单", Path: "/v1/admin/menu", Method: http.MethodPost},
-		{Group: "菜单管理", Name: "更新菜单", Path: "/v1/admin/menu", Method: http.MethodPut},
-		{Group: "菜单管理", Name: "删除菜单", Path: "/v1/admin/menu", Method: http.MethodDelete},
-
-		{Group: "权限模块", Name: "获取用户权限", Path: "/v1/admin/user/permissions", Method: http.MethodGet},
-		{Group: "权限模块", Name: "获取角色权限", Path: "/v1/admin/role/permissions", Method: http.MethodGet},
-		{Group: "权限模块", Name: "更新角色权限", Path: "/v1/admin/role/permission", Method: http.MethodPut},
-		{Group: "权限模块", Name: "获取角色列表", Path: "/v1/admin/roles", Method: http.MethodGet},
-		{Group: "权限模块", Name: "创建角色", Path: "/v1/admin/role", Method: http.MethodPost},
-		{Group: "权限模块", Name: "更新角色", Path: "/v1/admin/role", Method: http.MethodPut},
-		{Group: "权限模块", Name: "删除角色", Path: "/v1/admin/role", Method: http.MethodDelete},
-
-		{Group: "权限模块", Name: "获取管理员列表", Path: "/v1/admin/users", Method: http.MethodGet},
-		{Group: "权限模块", Name: "更新管理员信息", Path: "/v1/admin/user", Method: http.MethodPut},
-		{Group: "权限模块", Name: "创建管理员账号", Path: "/v1/admin/user", Method: http.MethodPost},
-		{Group: "权限模块", Name: "删除管理员", Path: "/v1/admin/user", Method: http.MethodDelete},
-
-		{Group: "权限模块", Name: "获取API列表", Path: "/v1/admin/apis", Method: http.MethodGet},
-		{Group: "权限模块", Name: "创建API", Path: "/v1/admin/api", Method: http.MethodPost},
-		{Group: "权限模块", Name: "更新API", Path: "/v1/admin/api", Method: http.MethodPut},
-		{Group: "权限模块", Name: "删除API", Path: "/v1/admin/api", Method: http.MethodDelete},
-	}
-
-	return m.db.Create(&initialApis).Error
+	// API 数据现在由 HTTP 服务器启动时自动从 Gin 路由同步
+	// 这里不再需要手动维护 API 列表
+	// 参见 internal/server/http.go 中的 syncRoutesToDB 函数
+	m.log.Info("API数据将由HTTP服务器启动时自动同步")
+	return nil
 }
 func (m *MigrateServer) initialMenuData(ctx context.Context) error {
 	menuList := make([]api.MenuDataItem, 0)
@@ -244,7 +220,7 @@ func (m *MigrateServer) initialMenuData(ctx context.Context) error {
 		m.log.Error("json.Unmarshal error", zap.Error(err))
 		return err
 	}
-	
+
 	// 只创建不存在的菜单
 	for _, item := range menuList {
 		var existingMenu model.Menu
@@ -277,7 +253,7 @@ func (m *MigrateServer) initialMenuData(ctx context.Context) error {
 		}
 		// 如果菜单已存在，跳过创建
 	}
-	
+
 	return nil
 }
 
@@ -287,10 +263,10 @@ func (m *MigrateServer) updateMenuData(ctx context.Context) error {
 	if err := m.db.Find(&menus).Error; err != nil {
 		return err
 	}
-	
+
 	for _, menu := range menus {
 		update := make(map[string]interface{})
-		
+
 		// 如果新字段为空，则从旧字段映射
 		if menu.MenuName == "" && menu.Title != "" {
 			update["menu_name"] = menu.Title
@@ -323,14 +299,14 @@ func (m *MigrateServer) updateMenuData(ctx context.Context) error {
 		if menu.IconType == "" {
 			update["icon_type"] = "1" // 默认 iconify
 		}
-		
+
 		if len(update) > 0 {
 			if err := m.db.Model(&model.Menu{}).Where("id = ?", menu.ID).Updates(update).Error; err != nil {
 				m.log.Warn("update menu data error", zap.Uint("id", menu.ID), zap.Error(err))
 			}
 		}
 	}
-	
+
 	return nil
 }
 

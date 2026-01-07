@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
+	"go-noah/api"
 	"go-noah/docs"
 	"go-noah/internal/middleware"
 	"go-noah/internal/router"
+	"go-noah/internal/service"
 	"go-noah/pkg/jwt"
 	"go-noah/pkg/log"
 	"go-noah/pkg/server/http"
@@ -60,5 +63,30 @@ func NewHTTPServer(
 	// 使用 router 包注册路由
 	router.InitRouter(s.Engine, jwt, e, logger)
 
+	// 自动同步路由到数据库
+	go syncRoutesToDB(s.Engine, logger)
+
 	return s
+}
+
+// syncRoutesToDB 同步 Gin 路由到数据库
+func syncRoutesToDB(engine *gin.Engine, logger *log.Logger) {
+	// 获取所有注册的路由
+	ginRoutes := engine.Routes()
+	
+	// 转换为 api.RouteInfo
+	routes := make([]api.RouteInfo, 0, len(ginRoutes))
+	for _, r := range ginRoutes {
+		routes = append(routes, api.RouteInfo{
+			Method:  r.Method,
+			Path:    r.Path,
+			Handler: r.Handler,
+		})
+	}
+	
+	// 调用 service 同步
+	ctx := context.Background()
+	if err := service.AdminServiceApp.SyncRoutesToDB(ctx, routes); err != nil {
+		logger.Error("同步路由到数据库失败")
+	}
 }

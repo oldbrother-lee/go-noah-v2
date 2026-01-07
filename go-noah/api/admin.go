@@ -334,3 +334,10 @@ type GetUserRoutesResponse struct {
 	Data UserRouteData `json:"data"`
 }
 
+// RouteInfo 路由信息（用于同步路由到数据库）
+type RouteInfo struct {
+	Method  string `json:"method"`
+	Path    string `json:"path"`
+	Handler string `json:"handler"`
+}
+

@@ -1000,3 +1000,143 @@ func (s *AdminService) convertMenuToElegantRoute(menu *model.Menu, menuMap map[u
 
 	return route
 }
+
+// SyncRoutesToDB 同步 Gin 路由到数据库
+// routes 是从 gin.Engine.Routes() 获取的路由信息
+func (s *AdminService) SyncRoutesToDB(ctx context.Context, routes []api.RouteInfo) error {
+	repo := s.getAdminRepo()
+
+	// 定义路由分组规则
+	groupRules := map[string]string{
+		"/v1/login":       "基础API",
+		"/v1/menus":       "基础API",
+		"/v1/user":        "基础API",
+		"/v1/admin/menu":  "菜单管理",
+		"/v1/admin/menus": "菜单管理",
+		"/v1/admin/user":  "用户管理",
+		"/v1/admin/users": "用户管理",
+		"/v1/admin/role":  "角色管理",
+		"/v1/admin/roles": "角色管理",
+		"/v1/admin/api":   "API管理",
+		"/v1/admin/apis":  "API管理",
+		"/route":          "路由管理",
+	}
+
+	// 需要排除的路由（不需要权限管理的）
+	excludePaths := map[string]bool{
+		"/swagger/*any":     true,
+		"/api/swagger/*any": true,
+		"/":                 true,
+	}
+
+	syncCount := 0
+	for _, route := range routes {
+		// 跳过排除的路由
+		if excludePaths[route.Path] {
+			continue
+		}
+
+		// 只处理 /v1 或 /api/v1 开头的路由
+		path := route.Path
+		if strings.HasPrefix(path, "/api") {
+			path = strings.TrimPrefix(path, "/api")
+		}
+		if !strings.HasPrefix(path, "/v1") && !strings.HasPrefix(path, "/route") {
+			continue
+		}
+
+		// 检查是否已存在
+		exists, err := repo.CheckApiExists(ctx, path, route.Method)
+		if err != nil {
+			global.Logger.Warn("检查API是否存在失败", zap.String("path", path), zap.Error(err))
+			continue
+		}
+		if exists {
+			continue
+		}
+
+		// 确定分组
+		group := "其他"
+		for prefix, g := range groupRules {
+			if strings.HasPrefix(path, prefix) {
+				group = g
+				break
+			}
+		}
+
+		// 生成名称
+		name := generateApiName(path, route.Method)
+
+		// 创建 API 记录
+		newApi := &model.Api{
+			Group:  group,
+			Name:   name,
+			Path:   path,
+			Method: route.Method,
+		}
+		if err := repo.ApiCreate(ctx, newApi); err != nil {
+			global.Logger.Warn("创建API失败", zap.String("path", path), zap.Error(err))
+			continue
+		}
+		syncCount++
+		global.Logger.Info("同步新API", zap.String("path", path), zap.String("method", route.Method))
+	}
+
+	global.Logger.Info("路由同步完成", zap.Int("syncCount", syncCount))
+	return nil
+}
+
+// generateApiName 根据路径和方法生成 API 名称
+func generateApiName(path, method string) string {
+	// 方法对应的动作
+	methodAction := map[string]string{
+		"GET":    "获取",
+		"POST":   "创建",
+		"PUT":    "更新",
+		"DELETE": "删除",
+	}
+
+	action := methodAction[method]
+	if action == "" {
+		action = method
+	}
+
+	// 从路径提取资源名
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 0 {
+		return action + "资源"
+	}
+
+	// 取最后一个非参数部分
+	resource := ""
+	for i := len(parts) - 1; i >= 0; i-- {
+		if !strings.HasPrefix(parts[i], ":") && parts[i] != "v1" && parts[i] != "admin" {
+			resource = parts[i]
+			break
+		}
+	}
+
+	// 资源名映射
+	resourceNames := map[string]string{
+		"menus":             "菜单列表",
+		"menu":              "菜单",
+		"users":             "用户列表",
+		"user":              "用户",
+		"roles":             "角色列表",
+		"role":              "角色",
+		"apis":              "API列表",
+		"api":               "API",
+		"permissions":       "权限",
+		"permission":        "权限",
+		"login":             "登录",
+		"getUserRoutes":     "用户路由",
+		"getConstantRoutes": "常量路由",
+		"isRouteExist":      "路由存在性",
+	}
+
+	if name, ok := resourceNames[resource]; ok {
+		return action + name
+	}
+
+	return action + resource
+}

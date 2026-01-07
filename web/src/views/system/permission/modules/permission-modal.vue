@@ -58,7 +58,7 @@ function buildMenuTree(menus: any[]): any[] {
 
   menus.forEach(menu => {
     map.set(menu.id, {
-      key: `menu:${menu.routePath || menu.path}`,
+      key: `menu:${menu.routePath || menu.path},read`,
       label: menu.menuName || menu.title,
       children: []
     });

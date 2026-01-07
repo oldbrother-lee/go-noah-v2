@@ -1,13 +1,16 @@
 package middleware
 
 import (
-	"github.com/casbin/casbin/v2"
-	"github.com/duke-git/lancet/v2/convertor"
-	"github.com/gin-gonic/gin"
-	"net/http"
+	"strings"
+
 	"go-noah/api"
 	"go-noah/internal/model"
 	"go-noah/pkg/jwt"
+	"net/http"
+
+	"github.com/casbin/casbin/v2"
+	"github.com/duke-git/lancet/v2/convertor"
+	"github.com/gin-gonic/gin"
 )
 
 func AuthMiddleware(e *casbin.SyncedEnforcer) gin.HandlerFunc {
@@ -21,14 +24,14 @@ func AuthMiddleware(e *casbin.SyncedEnforcer) gin.HandlerFunc {
 		}
 		uid := v.(*jwt.MyCustomClaims).UserId
 		uidStr := convertor.ToString(uid)
-		
+
 		// 防呆设计：检查用户ID是否为1，或者用户是否有admin角色
 		if uidStr == model.AdminUserID {
 			// 用户ID为1，直接跳过权限检查
 			ctx.Next()
 			return
 		}
-		
+
 		// 检查用户是否有admin角色
 		roles, err := e.GetRolesForUser(uidStr)
 		if err == nil {
@@ -42,8 +45,14 @@ func AuthMiddleware(e *casbin.SyncedEnforcer) gin.HandlerFunc {
 		}
 
 		// 获取请求的资源和操作
+		// 去掉 /api 前缀，因为权限存储的路径不带 /api
+		path := ctx.Request.URL.Path
+		if strings.HasPrefix(path, "/api") {
+			path = strings.TrimPrefix(path, "/api")
+		}
+
 		sub := uidStr
-		obj := model.ApiResourcePrefix + ctx.Request.URL.Path
+		obj := model.ApiResourcePrefix + path
 		act := ctx.Request.Method
 
 		// 检查权限
