@@ -2,6 +2,7 @@ package router
 
 import (
 	"go-noah/internal/handler"
+	insight "go-noah/internal/handler/insight"
 	"go-noah/internal/middleware"
 	"go-noah/pkg/jwt"
 	"go-noah/pkg/log"
@@ -17,11 +18,16 @@ func InitRouter(r *gin.Engine, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logger *l
 	{
 		InitAdminRouter(api, jwt, e, logger)
 		InitUserRouter(api, jwt, e, logger)
+		InitInsightRouter(api, jwt, e, logger) // goInsight 功能路由
 	}
 
 	// 保持原有的 /v1 路由（向后兼容）
 	InitAdminRouter(r, jwt, e, logger)
 	InitUserRouter(r, jwt, e, logger)
+	InitInsightRouter(r, jwt, e, logger)
+
+	// WebSocket 路由（不需要认证，因为 WebSocket 升级在 handler 中处理）
+	r.GET("/ws/:channel", insight.WebSocketHandlerApp.HandleWebSocket)
 }
 
 // InitAdminRouter 初始化管理员相关路由
@@ -63,6 +69,30 @@ func InitAdminRouter(r gin.IRouter, jwt *jwt.JWT, e *casbin.SyncedEnforcer, logg
 			strictAuthRouter.POST("/admin/api", handler.AdminHandlerApp.ApiCreate)
 			strictAuthRouter.PUT("/admin/api", handler.AdminHandlerApp.ApiUpdate)
 			strictAuthRouter.DELETE("/admin/api", handler.AdminHandlerApp.ApiDelete)
+
+			// 部门管理
+			strictAuthRouter.GET("/admin/departments", handler.DepartmentHandlerApp.GetDepartmentTree)
+			strictAuthRouter.GET("/admin/departments/list", handler.DepartmentHandlerApp.GetDepartmentList)
+			strictAuthRouter.GET("/admin/department", handler.DepartmentHandlerApp.GetDepartment)
+			strictAuthRouter.POST("/admin/department", handler.DepartmentHandlerApp.CreateDepartment)
+			strictAuthRouter.PUT("/admin/department", handler.DepartmentHandlerApp.UpdateDepartment)
+			strictAuthRouter.DELETE("/admin/department", handler.DepartmentHandlerApp.DeleteDepartment)
+			strictAuthRouter.GET("/admin/department/users", handler.DepartmentHandlerApp.GetDepartmentUsers)
+
+			// 审批流程定义管理
+			strictAuthRouter.GET("/admin/flows", handler.FlowHandlerApp.GetFlowDefinitionList)
+			strictAuthRouter.GET("/admin/flow", handler.FlowHandlerApp.GetFlowDefinition)
+			strictAuthRouter.POST("/admin/flow", handler.FlowHandlerApp.CreateFlowDefinition)
+			strictAuthRouter.PUT("/admin/flow", handler.FlowHandlerApp.UpdateFlowDefinition)
+			strictAuthRouter.DELETE("/admin/flow", handler.FlowHandlerApp.DeleteFlowDefinition)
+			strictAuthRouter.PUT("/admin/flow/nodes", handler.FlowHandlerApp.SaveFlowNodes)
+
+			// 审批流程实例和任务
+			strictAuthRouter.POST("/flow/start", handler.FlowHandlerApp.StartFlow)
+			strictAuthRouter.GET("/flow/instance", handler.FlowHandlerApp.GetFlowInstance)
+			strictAuthRouter.GET("/flow/tasks/pending", handler.FlowHandlerApp.GetMyPendingTasks)
+			strictAuthRouter.POST("/flow/task/approve", handler.FlowHandlerApp.ApproveTask)
+			strictAuthRouter.POST("/flow/task/reject", handler.FlowHandlerApp.RejectTask)
 		}
 	}
 

@@ -25,22 +25,9 @@ export const request = createFlatRequest<App.Service.Response, RequestInstanceSt
       return config;
     },
     isBackendSuccess(response) {
-      // when the backend response code is "0000"(or other), it means the request is success
-      // you can change this logic by yourself via `VITE_SERVICE_SUCCESS_CODE`, support comma separated values like "0000,200"
-      const code = String(response.data.code ?? '');
-      const envVal = import.meta.env.VITE_SERVICE_SUCCESS_CODE || '';
-      const successCodes = envVal
-        .split(',')
-        .map(c => c.trim())
-        .filter(Boolean);
-      if (successCodes.length > 0) {
-        return successCodes.includes(code);
-      }
-      // default compatibility: accept common success codes and fallback to http status
-      if (code !== '') {
-        return code === '0000' || code === '200';
-      }
-      return response.status === 200;
+      // when the backend response code is "0"(default), it means the request is success
+      // to change this logic by yourself, you can modify the `VITE_SERVICE_SUCCESS_CODE` in `.env` file
+      return String(response.data.code) === import.meta.env.VITE_SERVICE_SUCCESS_CODE;
     },
     async onBackendFail(response, instance) {
       const authStore = useAuthStore();
@@ -114,9 +101,9 @@ export const request = createFlatRequest<App.Service.Response, RequestInstanceSt
       let message = error.message;
       let backendErrorCode = '';
 
-      // get backend error message and code
-      if (error.code === BACKEND_ERROR_CODE) {
-        const respData: any = error.response?.data || {};
+      // get backend error message and code (包括 HTTP 4xx/5xx 错误)
+      const respData: any = error.response?.data || {};
+      if (respData.message || respData.msg) {
         message = respData.msg ?? respData.message ?? message;
         backendErrorCode = String(respData.code || '');
       }
@@ -196,19 +183,9 @@ export const requestRaw = createFlatRequest<any, RequestInstanceState>(
       return config;
     },
     isBackendSuccess(response) {
-      // when the backend response code is "0000"(or other), it means the request is success
-      // you can change this logic by yourself via `VITE_SERVICE_SUCCESS_CODE`, support comma separated values like "0000,200"
-      const code = String(response.data.code ?? '');
-      const envVal = import.meta.env.VITE_SERVICE_SUCCESS_CODE || '';
-      const successCodes = envVal
-        .split(',')
-        .map(c => c.trim())
-        .filter(Boolean);
-      if (successCodes.length > 0) {
-        return successCodes.includes(code);
-      }
-      // default compatibility: accept common success codes and fallback to http status
-      return code === '0000' || code === '200' || response.status === 200;
+      // when the backend response code is "0"(default), it means the request is success
+      // to change this logic by yourself, you can modify the `VITE_SERVICE_SUCCESS_CODE` in `.env` file
+      return String(response.data.code) === import.meta.env.VITE_SERVICE_SUCCESS_CODE;
     },
     async onBackendFail(response, instance) {
       const authStore = useAuthStore();

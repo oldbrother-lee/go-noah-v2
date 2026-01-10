@@ -28,10 +28,24 @@ func HandleError(ctx *gin.Context, httpCode int, err error, data interface{}) {
 	if data == nil {
 		data = map[string]string{}
 	}
-	resp := Response{Code: errorCodeMap[err], Message: err.Error(), Data: data}
-	if _, ok := errorCodeMap[err]; !ok {
-		resp = Response{Code: 500, Message: "unknown error", Data: data}
-	}
+
+	// 默认错误码为 1（表示业务错误）
+	code := 1
+	msg := err.Error()
+
+	// 尝试在 errorCodeMap 中查找自定义错误码
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// 错误类型不可哈希，使用默认错误码
+			}
+		}()
+		if c, ok := errorCodeMap[err]; ok {
+			code = c
+		}
+	}()
+
+	resp := Response{Code: code, Message: msg, Data: data}
 	ctx.JSON(httpCode, resp)
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go-noah/api"
 	"go-noah/internal/model"
+	"go-noah/internal/model/insight"
 	"go-noah/pkg/log"
 	"go-noah/pkg/sid"
 	"net/http"
@@ -51,6 +52,32 @@ func (m *MigrateServer) Start(ctx context.Context) error {
 		&model.Menu{},
 		&model.Role{},
 		&model.Api{},
+		// 新增: 部门管理
+		&model.Department{},
+		&model.RoleDepartment{},
+		// 新增: 审批流程
+		&model.FlowDefinition{},
+		&model.FlowNode{},
+		&model.FlowInstance{},
+		&model.FlowTask{},
+		&model.FlowLog{},
+		&model.FlowCC{},
+		// goInsight 功能表
+		&insight.DBEnvironment{},
+		&insight.DBConfig{},
+		&insight.DBSchema{},
+		&insight.Organization{},
+		&insight.OrganizationUser{},
+		&insight.DASUserSchemaPermission{},
+		&insight.DASUserTablePermission{},
+		&insight.DASAllowedOperation{},
+		&insight.DASRecord{},
+		&insight.DASFavorite{},
+		&insight.OrderRecord{},
+		&insight.OrderTask{},
+		&insight.OrderOpLog{},
+		&insight.OrderMessage{},
+		&insight.InspectParams{},
 	); err != nil {
 		m.log.Error("user migrate error", zap.Error(err))
 		return err
@@ -76,6 +103,24 @@ func (m *MigrateServer) Start(ctx context.Context) error {
 	err = m.initialRBAC(ctx)
 	if err != nil {
 		m.log.Error("initialRBAC error", zap.Error(err))
+	}
+
+	// 新增: 初始化部门数据
+	err = m.initialDepartments(ctx)
+	if err != nil {
+		m.log.Error("initialDepartments error", zap.Error(err))
+	}
+
+	// 新增: 初始化审批流程定义
+	err = m.initialFlowDefinitions(ctx)
+	if err != nil {
+		m.log.Error("initialFlowDefinitions error", zap.Error(err))
+	}
+
+	// 新增: 初始化审核参数
+	err = m.initialInspectParams(ctx)
+	if err != nil {
+		m.log.Error("initialInspectParams error", zap.Error(err))
 	}
 
 	m.log.Info("AutoMigrate success")
@@ -129,9 +174,11 @@ func (m *MigrateServer) initialAdminUser(ctx context.Context) error {
 }
 func (m *MigrateServer) initialRBAC(ctx context.Context) error {
 	roles := []model.Role{
-		{Sid: model.AdminRole, Name: "超级管理员"},
-		{Sid: "1000", Name: "运营人员"},
-		{Sid: "1001", Name: "访客"},
+		{Sid: model.AdminRole, Name: "超级管理员", Description: "系统最高权限，可管理所有功能", DataScope: model.DataScopeAll},
+		{Sid: model.RoleDBA, Name: "DBA", Description: "数据库管理员，可管理数据库和审批工单", DataScope: model.DataScopeAll},
+		{Sid: model.RoleDeveloper, Name: "开发人员", Description: "普通开发人员，可提交工单和查询数据", DataScope: model.DataScopeDeptTree},
+		{Sid: "1000", Name: "运营人员", Description: "运营人员，有限的管理权限", DataScope: model.DataScopeDept},
+		{Sid: "1001", Name: "访客", Description: "只读权限", DataScope: model.DataScopeSelf},
 	}
 
 	// 只创建不存在的角色
@@ -777,3 +824,330 @@ var menuData = `[
     "locale": "menu.menu4.menu2"
   }
 ]`
+
+// initialDepartments 初始化部门数据
+func (m *MigrateServer) initialDepartments(ctx context.Context) error {
+	departments := []model.Department{
+		{
+			Model:    gorm.Model{ID: 1},
+			ParentID: 0,
+			Name:     "总公司",
+			Code:     "HQ",
+			Path:     "/1/",
+			Level:    1,
+			Leader:   "admin",
+			LeaderID: 1,
+			Sort:     1,
+			Status:   1,
+		},
+		{
+			Model:    gorm.Model{ID: 2},
+			ParentID: 1,
+			Name:     "技术部",
+			Code:     "TECH",
+			Path:     "/1/2/",
+			Level:    2,
+			Sort:     1,
+			Status:   1,
+		},
+		{
+			Model:    gorm.Model{ID: 3},
+			ParentID: 1,
+			Name:     "运营部",
+			Code:     "OPS",
+			Path:     "/1/3/",
+			Level:    2,
+			Sort:     2,
+			Status:   1,
+		},
+		{
+			Model:    gorm.Model{ID: 4},
+			ParentID: 2,
+			Name:     "DBA组",
+			Code:     "DBA",
+			Path:     "/1/2/4/",
+			Level:    3,
+			Sort:     1,
+			Status:   1,
+		},
+		{
+			Model:    gorm.Model{ID: 5},
+			ParentID: 2,
+			Name:     "开发组",
+			Code:     "DEV",
+			Path:     "/1/2/5/",
+			Level:    3,
+			Sort:     2,
+			Status:   1,
+		},
+	}
+
+	for _, dept := range departments {
+		var existing model.Department
+		if err := m.db.Where("id = ? OR code = ?", dept.ID, dept.Code).First(&existing).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				if err := m.db.Create(&dept).Error; err != nil {
+					m.log.Warn("create department error", zap.String("code", dept.Code), zap.Error(err))
+				}
+			} else {
+				m.log.Warn("check department error", zap.String("code", dept.Code), zap.Error(err))
+			}
+		}
+	}
+
+	m.log.Info("初始化部门数据完成")
+	return nil
+}
+
+// initialFlowDefinitions 初始化审批流程定义
+func (m *MigrateServer) initialFlowDefinitions(ctx context.Context) error {
+	// DDL工单审批流程
+	ddlFlow := model.FlowDefinition{
+		Model:       gorm.Model{ID: 1},
+		Code:        "order_ddl",
+		Name:        "DDL工单审批流程",
+		Type:        "order_ddl",
+		Description: "用于DDL类型SQL的审批流程",
+		Version:     1,
+		Status:      1,
+	}
+
+	// DML工单审批流程
+	dmlFlow := model.FlowDefinition{
+		Model:       gorm.Model{ID: 2},
+		Code:        "order_dml",
+		Name:        "DML工单审批流程",
+		Type:        "order_dml",
+		Description: "用于DML类型SQL的审批流程",
+		Version:     1,
+		Status:      1,
+	}
+
+	// 数据导出审批流程
+	exportFlow := model.FlowDefinition{
+		Model:       gorm.Model{ID: 3},
+		Code:        "order_export",
+		Name:        "数据导出审批流程",
+		Type:        "order_export",
+		Description: "用于数据导出的审批流程",
+		Version:     1,
+		Status:      1,
+	}
+
+	flows := []model.FlowDefinition{ddlFlow, dmlFlow, exportFlow}
+
+	for _, flow := range flows {
+		var existing model.FlowDefinition
+		if err := m.db.Where("id = ? OR code = ?", flow.ID, flow.Code).First(&existing).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				if err := m.db.Create(&flow).Error; err != nil {
+					m.log.Warn("create flow definition error", zap.String("code", flow.Code), zap.Error(err))
+				} else {
+					// 为每个流程创建默认节点
+					m.createDefaultFlowNodes(flow.ID, flow.Code)
+				}
+			} else {
+				m.log.Warn("check flow definition error", zap.String("code", flow.Code), zap.Error(err))
+			}
+		}
+	}
+
+	m.log.Info("初始化审批流程定义完成")
+	return nil
+}
+
+// createDefaultFlowNodes 为流程创建默认节点
+func (m *MigrateServer) createDefaultFlowNodes(flowDefID uint, flowCode string) {
+	nodes := []model.FlowNode{
+		{
+			FlowDefID:    flowDefID,
+			NodeCode:     "start",
+			NodeName:     "开始",
+			NodeType:     model.NodeTypeStart,
+			Sort:         1,
+			NextNodeCode: "dba_approval",
+		},
+		{
+			FlowDefID:     flowDefID,
+			NodeCode:      "dba_approval",
+			NodeName:      "DBA审批",
+			NodeType:      model.NodeTypeApproval,
+			Sort:          2,
+			ApproverType:  model.ApproverTypeRole,
+			ApproverIDs:   model.RoleDBA,
+			MultiMode:     model.MultiModeAny,
+			RejectAction:  model.RejectActionToStart,
+			TimeoutHours:  24,
+			TimeoutAction: "notify",
+			NextNodeCode:  "end",
+		},
+		{
+			FlowDefID:    flowDefID,
+			NodeCode:     "end",
+			NodeName:     "结束",
+			NodeType:     model.NodeTypeEnd,
+			Sort:         3,
+			NextNodeCode: "",
+		},
+	}
+
+	for _, node := range nodes {
+		if err := m.db.Create(&node).Error; err != nil {
+			m.log.Warn("create flow node error",
+				zap.String("flowCode", flowCode),
+				zap.String("nodeCode", node.NodeCode),
+				zap.Error(err))
+		}
+	}
+}
+
+// initialInspectParams 初始化SQL审核参数（调用公共函数）
+func (m *MigrateServer) initialInspectParams(ctx context.Context) error {
+	return InitializeInspectParams(m.db, m.log)
+}
+
+// InitializeInspectParams 初始化SQL审核参数（公共函数，可在服务启动和迁移中使用）
+func InitializeInspectParams(db *gorm.DB, logger *log.Logger) error {
+	var params []map[string]interface{} = []map[string]interface{}{
+		// TABLE
+		{"params": map[string]int{"MAX_TABLE_NAME_LENGTH": 32}, "remark": "表名的长度"},
+		{"params": map[string]bool{"CHECK_TABLE_COMMENT": true}, "remark": "检查表是否有注释"},
+		{"params": map[string]int{"TABLE_COMMENT_LENGTH": 64}, "remark": "表注释的长度"},
+		{"params": map[string]bool{"CHECK_IDENTIFIER": true}, "remark": "对象名必须使用字符串范围为正则[a-zA-Z0-9_]"},
+		{"params": map[string]bool{"CHECK_IDENTIFER_KEYWORD": false}, "remark": "对象名是否可以使用关键字"},
+		{"params": map[string]bool{"CHECK_TABLE_CHARSET": true}, "remark": "是否检查表的字符集和排序规则"},
+		{"params": map[string][]map[string]string{"TABLE_SUPPORT_CHARSET": {
+			{"charset": "utf8", "recommend": "utf8_general_ci"},
+			{"charset": "utf8mb4", "recommend": "utf8mb4_general_ci"},
+		}}, "remark": "表支持的字符集"},
+		{"params": map[string]bool{"CHECK_TABLE_ENGINE": true}, "remark": "是否检查表的存储引擎"},
+		{"params": map[string][]string{"TABLE_SUPPORT_ENGINE": {"InnoDB"}}, "remark": "表支持的存储引擎"},
+		{"params": map[string]bool{"ENABLE_PARTITION_TABLE": false}, "remark": "是否启用分区表"},
+		{"params": map[string]bool{"CHECK_TABLE_PRIMARY_KEY": true}, "remark": "检查表是否有主键"},
+		{"params": map[string]bool{"TABLE_AT_LEAST_ONE_COLUMN": true}, "remark": "表至少要有一列，语法默认支持"},
+		{"params": map[string]bool{"CHECK_TABLE_AUDIT_TYPE_COLUMNS": true}, "remark": "启用审计类型的字段(col1 datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP && col2 datetime DEFAULT CURRENT_TIMESTAMP)"},
+		{"params": map[string]bool{"ENABLE_CREATE_TABLE_AS": false}, "remark": "是否允许create table as语法"},
+		{"params": map[string]bool{"ENABLE_CREATE_TABLE_LIKE": false}, "remark": "是否允许create table like语法"},
+		{"params": map[string]bool{"ENABLE_FOREIGN_KEY": false}, "remark": "是否启用外键"},
+		{"params": map[string]bool{"CHECK_TABLE_AUTOINCREMENT_INIT_VALUE": true}, "remark": "检查建表是自增列初始值是否为1"},
+		{"params": map[string]bool{"ENABLE_CREATE_VIEW": true}, "remark": "是否支持创建和使用视图"},
+		{"params": map[string]interface{}{"INNODB_ROW_FORMAT": []string{"DYNAMIC"}}, "remark": "InnoDB表支持的行格式"},
+		// COLUMN
+		{"params": map[string]int{"MAX_COLUMN_NAME_LENGTH": 64}, "remark": "列名的长度"},
+		{"params": map[string]bool{"CHECK_COLUMN_CHARSET": true}, "remark": "是否检查列的字符集"},
+		{"params": map[string]bool{"CHECK_COLUMN_COMMENT": true}, "remark": "是否检查列的注释"},
+		{"params": map[string]int{"COLUMN_MAX_CHAR_LENGTH": 64}, "remark": "char长度大于N的时候需要改为varchar"},
+		{"params": map[string]int{"MAX_VARCHAR_LENGTH": 16383}, "remark": "最大允许定义的varchar长度"},
+		{"params": map[string]bool{"ENABLE_COLUMN_BLOB_TYPE": true}, "remark": "是否允许列的类型为BLOB/TEXT"},
+		{"params": map[string]bool{"ENABLE_COLUMN_JSON_TYPE": true}, "remark": "是否允许列的类型为JSON"},
+		{"params": map[string]bool{"ENABLE_COLUMN_BIT_TYPE": true}, "remark": "是否允许列的类型为BIT"},
+		{"params": map[string]bool{"ENABLE_COLUMN_TIMESTAMP_TYPE": false}, "remark": "是否允许列的类型为TIMESTAMP"},
+		{"params": map[string]bool{"CHECK_PRIMARYKEY_USE_BIGINT": true}, "remark": "主键是否为bigint"},
+		{"params": map[string]bool{"CHECK_PRIMARYKEY_USE_UNSIGNED": true}, "remark": "主键bigint是否为unsigned"},
+		{"params": map[string]bool{"CHECK_PRIMARYKEY_USE_AUTO_INCREMENT": true}, "remark": "主键是否定义为自增"},
+		{"params": map[string]bool{"ENABLE_COLUMN_NOT_NULL": true}, "remark": "是否允许列定义为NOT NULL"},
+		{"params": map[string]bool{"ENABLE_COLUMN_TIME_NULL": true}, "remark": "是否允许时间类型设置为NULL"},
+		{"params": map[string]bool{"CHECK_COLUMN_DEFAULT_VALUE": true}, "remark": "列必须要有默认值"},
+		{"params": map[string]bool{"CHECK_COLUMN_FLOAT_DOUBLE": true}, "remark": "将float/double转成int/bigint/decimal等"},
+		{"params": map[string]bool{"ENABLE_COLUMN_TYPE_CHANGE": false}, "remark": "是否允许变更列类型"},
+		{"params": map[string]bool{"ENABLE_COLUMN_TYPE_CHANGE_COMPATIBLE": true}, "remark": "允许tinyint-> int、int->bigint、char->varchar等"},
+		{"params": map[string]bool{"ENABLE_COLUMN_CHANGE_COLUMN_NAME": false}, "remark": "是否允许CHANGE修改列名操作"},
+		// INDEX
+		{"params": map[string]bool{"CHECK_UNIQ_INDEX_PREFIX": true}, "remark": "是否检查唯一索引前缀，如唯一索引必须以uniq_为前缀"},
+		{"params": map[string]bool{"CHECK_SECONDARY_INDEX_PREFIX": true}, "remark": "是否检查二级索引前缀，如普通索引必须以idx_为前缀"},
+		{"params": map[string]bool{"CHECK_FULLTEXT_INDEX_PREFIX": true}, "remark": "是否检查全文索引前缀，如全文索引必须以full_为前缀"},
+		{"params": map[string]string{"UNQI_INDEX_PREFIX": "UNIQ_"}, "remark": "定义唯一索引前缀，不区分大小写"},
+		{"params": map[string]string{"SECONDARY_INDEX_PREFIX": "IDX_"}, "remark": "定义二级索引前缀，不区分大小写"},
+		{"params": map[string]string{"FULLTEXT_INDEX_PREFIX": "FULL_"}, "remark": "定义全文索引前缀，不区分大小写"},
+		{"params": map[string]int{"SECONDARY_INDEX_MAX_KEY_PARTS": 8}, "remark": "组成二级索引的列数不能超过指定的个数,包括唯一索引"},
+		{"params": map[string]int{"PRIMARYKEY_MAX_KEY_PARTS": 1}, "remark": "组成主键索引的列数不能超过指定的个数"},
+		{"params": map[string]int{"MAX_INDEX_KEYS": 12}, "remark": "最多有N个索引，包括唯一索引/二级索引"},
+		{"params": map[string]bool{"ENABLE_INDEX_RENAME": false}, "remark": "是否允许rename索引名"},
+		{"params": map[string]bool{"ENABLE_REDUNDANT_INDEX": false}, "remark": "是否允许冗余索引"},
+		// ALTER
+		{"params": map[string]bool{"ENABLE_DROP_COLS": true}, "remark": "是否允许DROP列"},
+		{"params": map[string]bool{"ENABLE_DROP_INDEXES": true}, "remark": "是否允许DROP索引"},
+		{"params": map[string]bool{"ENABLE_DROP_PRIMARYKEY": false}, "remark": "是否允许DROP主键"},
+		{"params": map[string]bool{"ENABLE_DROP_TABLE": true}, "remark": "是否允许DROP TABLE"},
+		{"params": map[string]bool{"ENABLE_TRUNCATE_TABLE": true}, "remark": "是否允许TRUNCATE TABLE"},
+		{"params": map[string]bool{"ENABLE_RENAME_TABLE_NAME": false}, "remark": "是否允许rename表名"},
+		{"params": map[string]bool{"ENABLE_MYSQL_MERGE_ALTER_TABLE": true}, "remark": "MySQL同一个表的多个ALTER是否合并为单条语句"},
+		{"params": map[string]bool{"ENABLE_TIDB_MERGE_ALTER_TABLE": false}, "remark": "TiDB同一个表的多个ALTER是否合并为单条语句"},
+		// DML
+		{"params": map[string]bool{"DML_MUST_HAVE_WHERE": true}, "remark": "DML语句必须有where条件"},
+		{"params": map[string]bool{"DML_DISABLE_LIMIT": true}, "remark": "DML语句中不允许有LIMIT"},
+		{"params": map[string]bool{"DML_DISABLE_ORDERBY": true}, "remark": "DML语句中不允许有orderby"},
+		{"params": map[string]bool{"DML_DISABLE_SUBQUERY": true}, "remark": "DML语句不能有子查询"},
+		{"params": map[string]bool{"CHECK_DML_JOIN_WITH_ON": true}, "remark": "DML的JOIN语句必须有ON语句"},
+		{"params": map[string]string{"EXPLAIN_RULE": "first"}, "remark": "explain判断受影响行数时使用的规则('first', 'max')。 'first': 使用第一行的explain结果作为受影响行数, 'max': 使用explain结果中的最大值作为受影响行数"},
+		{"params": map[string]int{"MAX_AFFECTED_ROWS": 100}, "remark": "最大影响行数，默认100"},
+		{"params": map[string]int{"MAX_INSERT_ROWS": 100}, "remark": " 一次最多允许insert的行, eg: insert into tbl(col,...) values(row1), (row2)..."},
+		{"params": map[string]bool{"DISABLE_REPLACE": true}, "remark": "是否禁用replace语句"},
+		{"params": map[string]bool{"DISABLE_INSERT_INTO_SELECT": true}, "remark": "是否禁用insert/replace into select语法"},
+		{"params": map[string]bool{"DISABLE_ON_DUPLICATE": true}, "remark": "是否禁止insert on duplicate语法"},
+		// 禁止语法审核的表
+		{"params": map[string]interface{}{"DISABLE_AUDIT_DML_TABLES": []map[string]interface{}{
+			{"DB": "d1", "Tables": []string{"t1", "t2"}, "Reason": "研发禁止审核和提交"},
+			{"DB": "d2", "Tables": []string{"t1", "t2"}, "Reason": "研发禁止审核和提交"},
+		}}, "remark": "禁止指定的表的DML语句进行审核"},
+		{"params": map[string]interface{}{"DISABLE_AUDIT_DDL_TABLES": []map[string]interface{}{
+			{"DB": "d1", "Tables": []string{"t1", "t2"}, "Reason": "研发禁止审核和提交"},
+			{"DB": "d2", "Tables": []string{"t1", "t2"}, "Reason": "研发禁止审核和提交"},
+		}}, "remark": "禁止指定的表的DDL语句进行审核"},
+	}
+
+	for _, i := range params {
+		var inspectParams insight.InspectParams
+		jsonParams, err := json.Marshal(i["params"])
+		if err != nil {
+			logger.Error("marshal inspect params failed", zap.Error(err))
+			return err
+		}
+
+		// 使用 Remark 作为唯一标识查找（因为模型中有 uniqueIndex:uniq_remark）
+		result := db.Where("remark = ?", i["remark"].(string)).First(&inspectParams)
+		if result.Error != nil {
+			if result.Error == gorm.ErrRecordNotFound {
+				// 记录不存在，创建新记录
+				if err := db.Create(&insight.InspectParams{
+					Params: jsonParams,
+					Remark: i["remark"].(string),
+				}).Error; err != nil {
+					logger.Error("create inspect params failed",
+						zap.String("remark", i["remark"].(string)),
+						zap.Error(err))
+					return err
+				}
+			} else {
+				return result.Error
+			}
+		} else {
+			// 记录已存在，跳过（幂等性）
+			logger.Debug("inspect params already exists",
+				zap.String("remark", i["remark"].(string)))
+		}
+	}
+
+	logger.Info("初始化审核参数完成")
+	return nil
+}
+
+// InitializeInspectParamsIfNeeded 检查并初始化SQL审核参数（如果不存在则初始化）
+func InitializeInspectParamsIfNeeded(db *gorm.DB, logger *log.Logger) error {
+	// 检查 inspect_params 表是否有数据
+	var count int64
+	if err := db.Model(&insight.InspectParams{}).Count(&count).Error; err != nil {
+		logger.Error("检查审核参数数据失败", zap.Error(err))
+		return err
+	}
+
+	// 如果表为空或数据不足（少于预期的最小记录数），则初始化
+	if count == 0 {
+		logger.Info("检测到审核参数表为空，开始初始化...")
+		return InitializeInspectParams(db, logger)
+	}
+
+	// 如果已有数据，记录日志但不初始化（幂等性）
+	logger.Debug("审核参数数据已存在，跳过初始化", zap.Int64("count", count))
+	return nil
+}

@@ -99,19 +99,33 @@ const { columns, data, getData, getDataByPage, loading, mobilePagination } = use
     showQuickJumper: true
   },
   transformer: res => {
-    // response from requestRaw contains { code, message, data, total }
-    // res.data is the records array
-    // res.total is the total count
-    const responseData = res as any;
-    const records = responseData.data || [];
+    // 新框架响应格式: { code, message, data: { list, total } }
+    const responseData = (res as any)?.data || {};
+    const records = responseData.list || [];
     const total = responseData.total || 0;
     const current = searchParams.current;
     const size = searchParams.size;
 
     const recordsWithIndex = records.map((item: any, index: number) => {
+      // 字段映射：后端字段 -> 前端字段
       return {
         ...item,
-        index: (current - 1) * size + index + 1
+        index: (current - 1) * size + index + 1,
+        // 工单标题：后端是 title，前端期望 order_title
+        order_title: item.title || '',
+        // 实例：后端返回 instance_name (hostname:port 格式)，前端期望 instance
+        instance: item.instance_name || item.instance_id || '',
+        // 环境：后端返回 environment_name，前端使用环境名称而不是 ID
+        environment: item.environment_name || item.environment || '',
+        // 创建时间：后端是 CreatedAt (ISO 8601 格式)，前端期望 created_at (格式化后的时间)
+        created_at: item.CreatedAt ? new Date(item.CreatedAt).toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }) : ''
       };
     });
 
@@ -193,15 +207,17 @@ const { columns, data, getData, getDataByPage, loading, mobilePagination } = use
       align: 'center',
       width: 100,
       render: row => {
+        // 使用环境名称而不是 ID
+        const envName = row.environment_name || row.environment || '';
         const tagMap: Record<string, NaiveUI.ThemeColor> = {
           test: 'primary',
           prod: 'error',
           dev: 'info'
         };
-        const type = tagMap[row.environment] || 'default';
+        const type = tagMap[envName.toLowerCase()] || 'default';
         return (
           <NTag type={type} size="small">
-            {row.environment}
+            {envName}
           </NTag>
         );
       }

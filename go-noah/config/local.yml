@@ -21,8 +21,7 @@ data:
   #      driver: postgres
   #      dsn: host=localhost user=gorm password=gorm dbname=gorm port=9920 sslmode=disable TimeZone=Asia/Shanghai
   redis:
-    addr: 127.0.0.1:6350
-    password: ""
+    addr: 127.0.0.1:6379
     db: 0
     read_timeout: 0.2s
     write_timeout: 0.2s
@@ -50,3 +49,24 @@ ldap:
     nickname: "sn"           # 昵称属性名
     email: "mail"           # 邮箱属性名
     mobile: "mobile"        # 手机号属性名
+
+# gh-ost 配置（用于在线 DDL 变更）
+# https://github.com/github/gh-ost
+ghost:
+  path: "/Users/lee/Downloads/gh-ost"  # Gh-ost工具路径
+  args:                                 # Gh-ost工具参数列表
+    - "--allow-on-master"
+    - "--assume-rbr"
+    - "--initially-drop-ghost-table"
+    - "--initially-drop-old-table"
+    - "-initially-drop-socket-file"
+    - "-exact-rowcount"
+    - "--approve-renamed-columns"
+    - "--concurrent-rowcount=false"
+    - "--chunk-size=800"
+    - "--attempt-instant-ddl"
+    - "--hooks-path=/tmp"
+
+# 定时任务配置
+crontab:
+  sync_db_metas: "*/5 * * * *"  # 每5分钟同步一次远程数据库库表元数据到本地数据库

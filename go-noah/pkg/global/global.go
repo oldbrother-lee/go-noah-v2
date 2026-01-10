@@ -6,6 +6,7 @@ import (
 	"go-noah/pkg/sid"
 
 	"github.com/casbin/casbin/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
@@ -17,5 +18,6 @@ var (
 	JWT      *jwt.JWT
 	Sid      *sid.Sid
 	Enforcer *casbin.SyncedEnforcer
+	Redis    *redis.Client
 	Conf     *viper.Viper
 )

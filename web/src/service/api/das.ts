@@ -1,92 +1,104 @@
 import { request } from '../request';
 
-/** DAS (Data Access Service) API */
+/** DAS (Data Access Service) API - 新路由: /api/v1/insight/das/... */
 
 /**
  * Get environments
  */
 export function fetchEnvironments(params?: Record<string, any>) {
   return request<Api.Das.Environment[]>({
-    url: '/api/v1/das/environments',
+    url: '/api/v1/insight/environments',
     method: 'get',
     params
   });
 }
 
 /**
- * Get authorized schemas
+ * Get authorized schemas (用户授权的所有schemas)
  */
 export function fetchSchemas(params?: Record<string, any>) {
   return request<Api.Das.Schema[]>({
-    url: '/api/v1/das/schemas',
+    url: '/api/v1/insight/das/schemas',
     method: 'get',
     params
   });
 }
 
 /**
- * Get authorized tables
+ * Get authorized tables for schema
+ * @param params - { instance_id, schema }
  */
-export function fetchTables(params?: Record<string, any>) {
+export function fetchTables(params: { instance_id: string; schema: string }) {
   return request<Api.Das.Table[]>({
-    url: '/api/v1/das/tables',
-    method: 'get',
-    params
+    url: `/api/v1/insight/das/tables/${params.instance_id}/${params.schema}`,
+    method: 'get'
   });
 }
 
 /**
- * Execute MySQL/TiDB query
+ * Get table columns
+ * @param params - { instance_id, schema, table }
+ */
+export function fetchTableColumns(params: { instance_id: string; schema: string; table: string }) {
+  return request<Api.Das.Column[]>({
+    url: `/api/v1/insight/das/columns/${params.instance_id}/${params.schema}/${params.table}`,
+    method: 'get'
+  });
+}
+
+/**
+ * Execute SQL query
+ */
+export function fetchExecuteQuery(data: Api.Das.QueryRequest) {
+  return request<Api.Das.QueryResult>({
+    url: '/api/v1/insight/das/query',
+    method: 'post',
+    data,
+    skipErrorHandler: true
+  } as any);
+}
+
+/**
+ * Execute MySQL/TiDB query (alias for fetchExecuteQuery)
  */
 export function fetchExecuteMySQLQuery(data: Api.Das.QueryRequest) {
-  return request<Api.Das.QueryResult>({
-    url: '/api/v1/das/execute/query/mysql',
-    method: 'post',
-    data,
-    skipErrorHandler: true
-  } as any);
+  return fetchExecuteQuery(data);
 }
 
 /**
- * Execute ClickHouse query
+ * Execute ClickHouse query (alias for fetchExecuteQuery)
  */
 export function fetchExecuteClickHouseQuery(data: Api.Das.QueryRequest) {
-  return request<Api.Das.QueryResult>({
-    url: '/api/v1/das/execute/query/clickhouse',
-    method: 'post',
-    data,
-    skipErrorHandler: true
-  } as any);
+  return fetchExecuteQuery(data);
 }
 
 /**
- * Get user grants
+ * Get user grants/permissions
  */
 export function fetchUserGrants(params?: Record<string, any>) {
   return request<Api.Das.UserGrant>({
-    url: '/api/v1/das/user/grants',
+    url: '/api/v1/insight/das/permissions',
     method: 'get',
     params
   });
 }
 
 /**
- * Get database dictionary
+ * Get database dictionary (table info with columns)
  */
 export function fetchDBDict(params?: Record<string, any>) {
   return request<Api.Das.DBDict>({
-    url: '/api/v1/das/dbdict',
-    method: 'get',
-    params
+    url: '/api/v1/insight/das/columns/' + params?.instance_id + '/' + params?.schema + '/' + params?.table,
+    method: 'get'
   });
 }
 
 /**
- * Get query history
+ * Get query history/records
  */
 export function fetchHistory(params?: Record<string, any>) {
   return request<Api.Das.History[]>({
-    url: '/api/v1/das/history',
+    url: '/api/v1/insight/das/records',
     method: 'get',
     params
   });
@@ -97,7 +109,7 @@ export function fetchHistory(params?: Record<string, any>) {
  */
 export function fetchFavorites(params?: Record<string, any>) {
   return request<Api.Das.Favorite[]>({
-    url: '/api/v1/das/favorites',
+    url: '/api/v1/insight/das/favorites',
     method: 'get',
     params
   });
@@ -108,7 +120,7 @@ export function fetchFavorites(params?: Record<string, any>) {
  */
 export function fetchCreateFavorite(data: Api.Das.CreateFavoriteRequest) {
   return request<Api.Das.Favorite>({
-    url: '/api/v1/das/favorites',
+    url: '/api/v1/insight/das/favorites',
     method: 'post',
     data
   });
@@ -119,7 +131,7 @@ export function fetchCreateFavorite(data: Api.Das.CreateFavoriteRequest) {
  */
 export function fetchUpdateFavorite(data: Api.Das.UpdateFavoriteRequest) {
   return request<Api.Das.Favorite>({
-    url: `/api/v1/das/favorites/${data.id}`,
+    url: `/api/v1/insight/das/favorites/${data.id}`,
     method: 'put',
     data
   });
@@ -130,7 +142,7 @@ export function fetchUpdateFavorite(data: Api.Das.UpdateFavoriteRequest) {
  */
 export function fetchDeleteFavorite(id: string | number) {
   return request({
-    url: `/api/v1/das/favorites/${id}`,
+    url: `/api/v1/insight/das/favorites/${id}`,
     method: 'delete'
   });
 }
@@ -140,20 +152,19 @@ export function fetchDeleteFavorite(id: string | number) {
  */
 export function fetchTableInfo(params?: Record<string, any>) {
   return request<Api.Das.TableInfo>({
-    url: '/api/v1/das/table-info',
-    method: 'get',
-    params
+    url: `/api/v1/insight/das/columns/${params?.instance_id}/${params?.schema}/${params?.table}`,
+    method: 'get'
   });
 }
 
 // Admin APIs for DAS management
 
 /**
- * Admin: Get schemas list grant
+ * Admin: Get schemas list grant (user schema permissions)
  */
 export function fetchAdminSchemasListGrant(params?: Record<string, any>) {
   return request<Api.Das.SchemaGrant[]>({
-    url: '/api/v1/das/admin/schemas/grant',
+    url: '/api/v1/insight/das/permissions',
     method: 'get',
     params
   });
@@ -164,7 +175,7 @@ export function fetchAdminSchemasListGrant(params?: Record<string, any>) {
  */
 export function fetchAdminCreateSchemasGrant(data: Api.Das.CreateSchemaGrantRequest) {
   return request({
-    url: '/api/v1/das/admin/schemas/grant',
+    url: '/api/v1/insight/das/permissions/schema',
     method: 'post',
     data
   });
@@ -175,7 +186,7 @@ export function fetchAdminCreateSchemasGrant(data: Api.Das.CreateSchemaGrantRequ
  */
 export function fetchAdminDeleteSchemasGrant(id: string | number) {
   return request({
-    url: `/api/v1/das/admin/schemas/grant/${id}`,
+    url: `/api/v1/insight/das/permissions/schema/${id}`,
     method: 'delete'
   });
 }
@@ -185,7 +196,7 @@ export function fetchAdminDeleteSchemasGrant(id: string | number) {
  */
 export function fetchAdminTablesGrant(params?: Record<string, any>) {
   return request<Api.Das.TableGrant[]>({
-    url: '/api/v1/das/admin/tables/grant',
+    url: '/api/v1/insight/das/permissions',
     method: 'get',
     params
   });
@@ -196,7 +207,7 @@ export function fetchAdminTablesGrant(params?: Record<string, any>) {
  */
 export function fetchAdminCreateTablesGrant(data: Api.Das.CreateTableGrantRequest) {
   return request({
-    url: '/api/v1/das/admin/tables/grant',
+    url: '/api/v1/insight/das/permissions/schema',
     method: 'post',
     data
   });
@@ -207,30 +218,29 @@ export function fetchAdminCreateTablesGrant(data: Api.Das.CreateTableGrantReques
  */
 export function fetchAdminDeleteTablesGrant(id: string | number) {
   return request({
-    url: `/api/v1/das/admin/tables/grant/${id}`,
+    url: `/api/v1/insight/das/permissions/schema/${id}`,
     method: 'delete'
   });
 }
 
 /**
- * Admin: Get instances list
+ * Admin: Get instances list (dbconfigs)
  */
 export function fetchAdminInstancesList(params?: Record<string, any>) {
   return request<Api.Das.Instance[]>({
-    url: '/api/v1/das/admin/instances/list',
+    url: '/api/v1/insight/dbconfigs',
     method: 'get',
     params
   });
 }
 
 /**
- * Admin: Get schemas list
+ * Admin: Get schemas list for instance
  */
 export function fetchAdminSchemasList(params?: Record<string, any>) {
   return request<Api.Das.Schema[]>({
-    url: '/api/v1/das/admin/schemas/list',
-    method: 'get',
-    params
+    url: `/api/v1/insight/dbconfigs/${params?.instance_id}/schemas`,
+    method: 'get'
   });
 }
 
@@ -239,8 +249,7 @@ export function fetchAdminSchemasList(params?: Record<string, any>) {
  */
 export function fetchAdminTablesList(params?: Record<string, any>) {
   return request<Api.Das.Table[]>({
-    url: '/api/v1/das/admin/tables/list',
-    method: 'get',
-    params
+    url: `/api/v1/insight/das/tables/${params?.instance_id}/${params?.schema}`,
+    method: 'get'
   });
 }

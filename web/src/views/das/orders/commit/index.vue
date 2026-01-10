@@ -126,8 +126,9 @@ async function loadSchemas(instanceId: number | null) {
 }
 
 async function loadUsers() {
-  const res = await fetchOrdersUsers({ is_page: false } as any);
-  users.value = (res as any)?.data ?? [];
+  const res = await fetchOrdersUsers();
+  // admin/users 返回分页格式 { list: [...], total: ... }
+  users.value = (res as any)?.data?.list ?? (res as any)?.data ?? [];
 }
 
 // 编辑器设置：右侧改为与 SQL 查询页一致的 CodeMirror
@@ -314,31 +315,34 @@ async function syntaxCheck() {
     const resp: any = await fetchSyntaxCheck(data as any);
     console.log('语法检查响应:', resp);
 
-    // 处理响应数据
-    if (resp !== null && resp !== undefined) {
-      const result: any = resp.data ?? resp;
-      syntaxRows.value = Array.isArray(result?.data) ? result.data : [];
-      
-      // 优先使用 result.status，如果没有则检查 API 是否成功返回
-      if (typeof result?.status === 'number') {
-        syntaxStatus.value = result.status;
-      } else if (syntaxRows.value.length === 0) {
-        // 对于导出工单等，如果没有返回 status 但也没有错误数据，视为通过
-        syntaxStatus.value = 0;
-      } else {
-        // 有错误数据但没有 status，视为失败
-        syntaxStatus.value = 1;
-      }
-      
-      if (syntaxStatus.value === 0) {
-        message.success('语法检查通过，您可以提交工单了，O(∩_∩)O');
-      }
-      // 失败不弹窗，直接展示表格
-    } else {
-      // 如果 resp 为 null/undefined，说明 API 调用成功但没有返回数据
-      // 对于导出工单，这可能是正常的，视为通过
-      syntaxStatus.value = 0;
+    // createFlatRequest 返回 { data, error, response } 格式
+    // 错误时: data=null, error=AxiosError
+    // 成功时: data=响应数据, error=null
+    
+    // 检查是否有错误（error 不为 null 或 data 为 null）
+    if (resp.error || resp.data === null || resp.data === undefined) {
+      // 请求失败
+      syntaxStatus.value = 1;
+      // 尝试从错误响应中获取详细数据用于展示
+      const errorData = resp.error?.response?.data?.data ?? resp.response?.data?.data ?? [];
+      syntaxRows.value = Array.isArray(errorData) ? errorData : [];
+      // 错误消息已由全局拦截器显示，不再重复
+      return;
+    }
+
+    // 请求成功，data 格式：{status: 0/1, data: [...]}（与老服务一致）
+    const resultData = resp.data?.data ?? [];
+    syntaxRows.value = Array.isArray(resultData) ? resultData : [];
+    
+    // 检查 status 字段（与老服务一致）
+    // status: 0表示语法检查通过，1表示语法检查不通过
+    const status = resp.data?.status ?? 1; // 默认不通过
+    syntaxStatus.value = status;
+    
+    if (status === 0) {
       message.success('语法检查通过，您可以提交工单了，O(∩_∩)O');
+    } else {
+      message.warning('语法检查未通过，请修复问题后重新检查');
     }
   } catch (e: any) {
     console.error('语法检查失败:', e);
@@ -402,14 +406,33 @@ async function submitOrder() {
     };
 
     const res: any = await fetchCreateOrder(payload as any);
-    console.log('API响应内容:', res);
-    // 当API返回成功时，res可能为null（因为data字段为null）
-    // 此时我们认为请求成功，因为没有抛出异常
-    if (res === null || res?.response.data.code === '0000') {
+    
+    // createFlatRequest 返回 { data, error, response } 格式
+    // 错误时: data=null, error=AxiosError
+    // 成功时: data=后端响应的data字段（工单对象）, error=null, response=完整响应
+    // 后端成功响应格式: { code: 0, message: "ok", data: {...} }
+    // 注意：res.data 是后端响应的 data 字段，不是整个响应对象
+    // 响应码在 res.response.data.code 中
+    
+    // 检查是否有错误
+    if (res.error) {
+      // 请求失败，错误消息已由全局拦截器显示
+      message.warning('工单提交失败');
+      return;
+    }
+    
+    // 检查响应码（成功时为 0）
+    // 响应码在 res.response.data.code 中，而不是 res.data.code
+    const successCode = import.meta.env.VITE_SERVICE_SUCCESS_CODE || '0';
+    const responseCode = String(res.response?.data?.code ?? '');
+    
+    if (responseCode === successCode) {
       message.success('工单提交成功');
       router.push('/das/orders-list');
     } else {
-      message.warning(res?.message || '工单提交失败');
+      // 如果响应码不匹配，显示后端返回的消息
+      const errorMessage = res.response?.data?.message || '工单提交失败';
+      message.warning(errorMessage);
     }
   } catch (e: any) {
     message.error(e?.message || '工单提交失败');
@@ -463,7 +486,7 @@ watch(
                   <NSelect
                     v-model:value="formModel.environment"
                     :size="appStore.isMobile ? 'small' : 'medium'"
-                    :options="environments.map((e: any) => ({ label: e.name, value: e.id }))"
+                    :options="environments.map((e: any) => ({ label: e.name, value: e.ID }))"
                     filterable
                     clearable
                     placeholder="请选择工单环境"
@@ -521,7 +544,7 @@ watch(
                     clearable
                     placeholder="请选择工单审核人"
                     :options="
-                      users.map((u: any) => ({ label: `${u.username} ${u.nick_name || ''}`, value: u.username }))
+                      users.map((u: any) => ({ label: `${u.username} ${u.nickname || ''}`, value: u.username }))
                     "
                   />
                 </NFormItem>
@@ -534,7 +557,7 @@ watch(
                     clearable
                     placeholder="请选择工单执行人"
                     :options="
-                      users.map((u: any) => ({ label: `${u.username} ${u.nick_name || ''}`, value: u.username }))
+                      users.map((u: any) => ({ label: `${u.username} ${u.nickname || ''}`, value: u.username }))
                     "
                   />
                 </NFormItem>
@@ -547,7 +570,7 @@ watch(
                     clearable
                     placeholder="请选择工单复核人"
                     :options="
-                      users.map((u: any) => ({ label: `${u.username} ${u.nick_name || ''}`, value: u.username }))
+                      users.map((u: any) => ({ label: `${u.username} ${u.nickname || ''}`, value: u.username }))
                     "
                   />
                 </NFormItem>
@@ -560,12 +583,12 @@ watch(
                     clearable
                     placeholder="请选择工单抄送人"
                     :options="
-                      users.map((u: any) => ({ label: `${u.username} ${u.nick_name || ''}`, value: u.username }))
+                      users.map((u: any) => ({ label: `${u.username} ${u.nickname || ''}`, value: u.username }))
                     "
                   />
                 </NFormItem>
                 <NFormItem>
-                  <NButton type="primary" :size="appStore.isMobile ? 'small' : 'medium'" :loading="loading" block="appStore.isMobile" @click="submitOrder">提交</NButton>
+                  <NButton type="primary" :size="appStore.isMobile ? 'small' : 'medium'" :loading="loading" :block="appStore.isMobile" @click="submitOrder">提交</NButton>
                 </NFormItem>
               </NForm>
             </div>
@@ -622,6 +645,8 @@ watch(
 /* 参考 SQL 查询页的编辑器样式 */
 .editor-card :deep(.n-card__content) {
   /* 右侧卡片内容作为外层容器，不再直接拉伸 */
+  display: flex;
+  flex-direction: column;
 }
 .editor-inner {
   display: flex;

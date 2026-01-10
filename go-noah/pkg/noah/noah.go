@@ -3,6 +3,7 @@ package noah
 import (
 	"go-noah/internal/job"
 	"go-noah/internal/repository"
+	insightRepo "go-noah/internal/repository/insight"
 	"go-noah/internal/server"
 	"go-noah/internal/task"
 	"go-noah/pkg/app"
@@ -12,6 +13,7 @@ import (
 	"go-noah/pkg/sid"
 
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func NewServerApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), error) {
@@ -20,8 +22,15 @@ func NewServerApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), erro
 	global.JWT = jwt.NewJwt(conf)
 	global.DB = repository.NewDB(conf, logger)
 	global.Enforcer = repository.NewCasbinEnforcer(conf, logger, global.DB)
+	global.Redis = repository.NewRedis(conf) // 初始化 Redis（用于 WebSocket 消息推送）
 	global.Logger = logger
 	global.Conf = conf
+
+	// 初始化审核参数（如果不存在则自动初始化）
+	if err := server.InitializeInspectParamsIfNeeded(global.DB, logger); err != nil {
+		logger.Error("初始化审核参数失败", zap.Error(err))
+		// 不阻止服务启动，只记录错误
+	}
 
 	// 创建 Repository 和 Transaction（不存储在 global，避免循环导入）
 	repo := repository.NewRepository(logger, global.DB, global.Enforcer)
@@ -44,6 +53,9 @@ func NewServerApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), erro
 		if sqlDB != nil {
 			_ = sqlDB.Close()
 		}
+		if global.Redis != nil {
+			_ = global.Redis.Close()
+		}
 	}
 	return a, cleanup, nil
 }
@@ -61,10 +73,12 @@ func NewTaskApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), error)
 	transaction := repository.NewTransaction(repo)
 
 	userRepo := repository.NewUserRepository(repo)
+	insightRepo := insightRepo.NewInsightRepository(repo, logger, global.Enforcer)
 
 	tk := task.NewTask(transaction, global.Logger, global.Sid)
 	userTask := task.NewUserTask(tk, userRepo)
-	taskServer := server.NewTaskServer(global.Logger, userTask)
+	insightTask := task.NewInsightTask(tk, insightRepo)
+	taskServer := server.NewTaskServer(global.Logger, userTask, insightTask, conf)
 
 	a := app.NewApp(
 		app.WithServer(taskServer),

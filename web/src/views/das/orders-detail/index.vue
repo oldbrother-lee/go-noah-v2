@@ -6,6 +6,10 @@ import {
   NButton,
   NDataTable,
   NDatePicker,
+  NCard,
+  NDivider,
+  NInputNumber,
+  NProgress,
   NSpace,
   NStep,
   NSteps,
@@ -19,6 +23,7 @@ import { format } from 'sql-formatter';
 import {
   fetchApproveOrder,
   fetchCloseOrder,
+  fetchControlGhost,
   fetchExecuteAllTasks,
   fetchExecuteSingleTask,
   fetchFeedbackOrder,
@@ -176,32 +181,27 @@ const handleSyntaxCheck = async () => {
     const resp: any = await fetchSyntaxCheck(data as any);
     console.log('语法检查响应:', resp);
 
-    // 处理响应数据
-    if (resp !== null && resp !== undefined) {
-      const result: any = resp.data ?? resp;
-      syntaxRows.value = Array.isArray(result?.data) ? result.data : [];
-      
-      // 优先使用 result.status，如果没有则检查 API 是否成功返回
-      if (typeof result?.status === 'number') {
-        syntaxStatus.value = result.status;
-      } else if (syntaxRows.value.length === 0) {
-        // 对于导出工单等，如果没有返回 status 但也没有错误数据，视为通过
-        syntaxStatus.value = 0;
-      } else {
-        // 有错误数据但没有 status，视为失败
-        syntaxStatus.value = 1;
-      }
-      
-      if (syntaxStatus.value === 0) {
-        message.success('语法检查通过');
-      } else {
-        message.warning('语法检查未通过');
-      }
-    } else {
-      // 如果 resp 为 null/undefined，说明 API 调用成功但没有返回数据
-      // 对于导出工单，这可能是正常的，视为通过
-      syntaxStatus.value = 0;
+    // 检查是否有错误
+    if (resp.error || resp.data === null || resp.data === undefined) {
+      syntaxStatus.value = 1;
+      const errorData = resp.error?.response?.data?.data ?? resp.response?.data?.data ?? [];
+      syntaxRows.value = Array.isArray(errorData) ? errorData : [];
+      return;
+    }
+
+    // 请求成功，data 格式：{status: 0/1, data: [...]}（与老服务一致）
+    const resultData = resp.data?.data ?? [];
+    syntaxRows.value = Array.isArray(resultData) ? resultData : [];
+    
+    // 检查 status 字段（与老服务一致）
+    // status: 0表示语法检查通过，1表示语法检查不通过
+    const status = resp.data?.status ?? 1; // 默认不通过
+    syntaxStatus.value = status;
+    
+    if (status === 0) {
       message.success('语法检查通过');
+    } else {
+      message.warning('语法检查未通过，请修复问题后重新检查');
     }
   } catch (e: any) {
     console.error('语法检查失败:', e);
@@ -274,27 +274,68 @@ const TRIM_LOG_LENGTH = 5 * 1024 * 1024; // 当超过最大长度时，保留前
 const logBuffer = ref<string[]>([]);
 const isUpdatingLog = ref(false);
 
+// gh-ost 进度信息
+interface GhostProgress {
+  percent?: number;
+  current?: number;
+  total?: number;
+  eta?: string;
+  operation?: string;
+}
+
+const ghostProgress = ref<GhostProgress | null>(null);
+const ghostThrottled = ref(false); // 是否已暂停
+const ghostControlLoading = ref(false); // 控制按钮加载状态
+const ghostChunkSize = ref<number | null>(800); // 默认 chunk-size 值
+
+// 判断是否是 gh-ost 执行的工单（DDL 类型且在执行中）
+const isGhostOrder = computed(() => {
+  if (!orderDetail.value || !isOrderExecuting.value) return false;
+  // DDL 类型会使用 gh-ost 执行
+  return orderDetail.value.sql_type === 'DDL';
+});
+
+// 显示用的 gh-ost 进度信息（如果没有收到进度信息，显示 0）
+const displayGhostProgress = computed((): GhostProgress | null => {
+  if (ghostProgress.value && ghostProgress.value.percent !== undefined) {
+    return ghostProgress.value;
+  }
+  // 如果是 gh-ost 工单但没有进度信息，显示 0
+  if (isGhostOrder.value) {
+    return { percent: 0 };
+  }
+  return null;
+});
+
 // 检查工单是否还在执行中
 const isOrderExecuting = computed(() => {
   const status = orderDetail.value?.progress;
   return status && ['执行中', '已批准'].includes(status);
 });
 
-const initWebSocket = () => {
+const initWebSocket = (force = false) => {
   // 如果已经连接，不重复连接
   if (websocket.value && websocket.value.readyState === WebSocket.OPEN) {
     return;
   }
 
-  // 如果工单不在执行中，且不是重连尝试，不建立连接
-  if (!isOrderExecuting.value && reconnectAttempts.value === 0) {
-    return;
-  }
-  
-  // 如果是重连尝试，但工单状态已改变，停止重连
-  if (reconnectAttempts.value > 0 && !isOrderExecuting.value) {
-    reconnectAttempts.value = 0;
-    return;
+  // 如果强制连接，跳过状态检查
+  if (!force) {
+    // 如果工单不在执行中，且不是重连尝试，不建立连接
+    if (!isOrderExecuting.value && reconnectAttempts.value === 0) {
+      console.log('WebSocket 连接被跳过：工单不在执行中', { 
+        orderId: route.params.id, 
+        status: orderDetail.value?.progress,
+        isOrderExecuting: isOrderExecuting.value 
+      });
+      return;
+    }
+    
+    // 如果是重连尝试，但工单状态已改变，停止重连
+    if (reconnectAttempts.value > 0 && !isOrderExecuting.value) {
+      reconnectAttempts.value = 0;
+      return;
+    }
   }
 
   const orderId = route.params.id as string;
@@ -326,8 +367,10 @@ const initWebSocket = () => {
   }
   
   try {
+    console.log('正在创建 WebSocket 连接', { orderId, wsUrl });
     websocket.value = new WebSocket(wsUrl);
   } catch (error) {
+    console.error('WebSocket 连接创建失败', { orderId, error, wsUrl });
     message.error('WebSocket 连接创建失败，请检查网络连接');
     return;
   }
@@ -339,6 +382,7 @@ const initWebSocket = () => {
 
   websocket.value.onopen = () => {
     reconnectAttempts.value = 0; // 重置重连次数
+    console.log('WebSocket 连接成功', { orderId, wsUrl });
     
     // 连接成功后，先恢复历史日志（如果为空）
     // 但不要覆盖已有的实时日志
@@ -369,8 +413,10 @@ const initWebSocket = () => {
   }, 200);
 
   websocket.value.onmessage = event => {
+    console.log('WebSocket 收到消息', { orderId, rawData: event.data });
     try {
       const result = JSON.parse(event.data);
+      console.log('WebSocket 消息解析成功', { orderId, type: result.type, data: result.data });
       let logText = '';
       
       if (result.type === 'processlist') {
@@ -382,11 +428,36 @@ const initWebSocket = () => {
         // processlist 类型替换整个内容
         oscContent.value = logText;
         logBuffer.value = []; // 清空缓冲区
+      } else if (result.type === 'ghost-progress') {
+        // gh-ost 进度信息
+        const progressData = result.data as GhostProgress;
+        if (progressData && typeof progressData.percent === 'number') {
+          ghostProgress.value = {
+            percent: progressData.percent,
+            current: progressData.current,
+            total: progressData.total,
+            eta: progressData.eta,
+            operation: progressData.operation
+          };
+          console.log('gh-ost 进度更新', ghostProgress.value);
+        }
       } else if (result.type === 'ghost') {
         // Append ghost logs
         logText = result.data;
         logBuffer.value.push(logText);
         throttledUpdateLog();
+        // 检查是否包含 throttle/unthrottle 相关消息
+        if (typeof logText === 'string') {
+          const lowerMsg = logText.toLowerCase();
+          if (lowerMsg.includes('throttle')) {
+            // 根据消息判断是暂停还是恢复
+            if (lowerMsg.includes('unthrottle') || lowerMsg.includes('resume')) {
+              ghostThrottled.value = false;
+            } else if (lowerMsg.includes('throttle') && !lowerMsg.includes('unthrottle')) {
+              ghostThrottled.value = true;
+            }
+          }
+        }
       } else {
         // Append content (默认类型)
         logText = `${result.data}\n`;
@@ -397,6 +468,7 @@ const initWebSocket = () => {
       // Auto refresh tasks on any message (防抖处理)
       debouncedRefresh();
     } catch (e) {
+      console.error('WebSocket 消息解析失败', { orderId, error: e, rawData: event.data });
       // 解析失败时，直接追加原始数据
       const logText = `${event.data}\n`;
       logBuffer.value.push(logText);
@@ -407,10 +479,12 @@ const initWebSocket = () => {
   };
 
   websocket.value.onerror = error => {
+    console.error('WebSocket 连接错误', { orderId, error, wsUrl });
     // 错误时会在 onclose 中处理重连
   };
 
   websocket.value.onclose = event => {
+    console.log('WebSocket 连接关闭', { orderId, code: event.code, reason: event.reason, wasClean: event.wasClean });
     websocket.value = null;
 
     // 检查工单状态（重新获取最新状态，避免状态不同步）
@@ -419,6 +493,7 @@ const initWebSocket = () => {
     
     if (shouldReconnect && reconnectAttempts.value < maxReconnectAttempts) {
       reconnectAttempts.value++;
+      console.log('准备重连 WebSocket', { orderId, attempt: reconnectAttempts.value, maxAttempts: maxReconnectAttempts });
       
       reconnectTimer = setTimeout(() => {
         // 重连前再次检查工单状态
@@ -429,8 +504,10 @@ const initWebSocket = () => {
         }
       }, reconnectDelay);
     } else if (reconnectAttempts.value >= maxReconnectAttempts) {
+      console.warn('WebSocket 重连次数已达上限', { orderId, attempts: reconnectAttempts.value });
       message.warning('WebSocket 连接失败，已停止自动重连。请刷新页面重试。');
     } else if (!shouldReconnect) {
+      console.log('工单状态已改变，不再重连', { orderId, currentStatus });
       reconnectAttempts.value = 0; // 重置重连次数
     }
   };
@@ -765,11 +842,105 @@ const getOrderDetail = async () => {
 
   loading.value = true;
   try {
-    const { data } = await fetchOrderDetail(orderId);
-    if (data) {
-      orderDetail.value = data as unknown as OrderDetailVO;
-      // 这里的 taskStats 需要从 preview 或 tasks 接口获取，暂时保持 null
-      // taskStats.value = null;
+    const res: any = await fetchOrderDetail(orderId);
+    // 后端返回格式: { order, tasks, logs }
+    // createFlatRequest 返回: { data: { order, tasks, logs }, error: null, response: {...} }
+    if (res.error) {
+      window.$message?.error('获取工单详情失败');
+      return;
+    }
+    
+    // 后端返回的数据在 res.data 中，格式为 { order, tasks, logs }
+    const responseData = res.data || {};
+    const orderData = responseData.order || responseData;
+    
+    if (orderData) {
+      // 时间格式化函数
+      const formatDateTime = (dateStr: string | null | undefined): string => {
+        if (!dateStr) return '';
+        try {
+          const date = new Date(dateStr);
+          return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+        } catch (e) {
+          return dateStr;
+        }
+      };
+      
+      // 解析 JSON 字段辅助函数
+      const parseJSONField = (field: any, defaultStatus: string = 'pending'): any[] => {
+        if (!field) return [];
+        // 如果是字符串，尝试解析为 JSON
+        if (typeof field === 'string') {
+          try {
+            const parsed = JSON.parse(field);
+            // 如果是字符串数组，转换为对象数组
+            if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+              return parsed.map((user: string) => ({ user, status: defaultStatus }));
+            }
+            // 如果已经是对象数组，直接返回
+            if (Array.isArray(parsed)) {
+              return parsed;
+            }
+            return [];
+          } catch (e) {
+            return [];
+          }
+        }
+        // 如果是数组
+        if (Array.isArray(field)) {
+          // 如果是字符串数组，转换为对象数组
+          if (field.length > 0 && typeof field[0] === 'string') {
+            return field.map((user: string) => ({ user, status: defaultStatus }));
+          }
+          // 如果已经是对象数组，直接返回
+          return field;
+        }
+        return [];
+      };
+
+      // 字段映射：后端字段 -> 前端字段
+      orderDetail.value = {
+        ...orderData,
+        // 工单标题：后端是 title，前端期望 title（已一致）
+        title: orderData.title || '',
+        // 环境：后端返回 environment_name，前端使用环境名称
+        environment: orderData.environment_name || orderData.environment || '',
+        // 实例：后端返回 instance_name (hostname:port 格式)
+        instance: orderData.instance_name || orderData.instance_id || '',
+        // 创建时间：后端是 CreatedAt，前端期望 created_at（格式化）
+        created_at: formatDateTime(orderData.CreatedAt || orderData.created_at),
+        // 更新时间：后端是 UpdatedAt，前端期望 updated_at（格式化）
+        updated_at: formatDateTime(orderData.UpdatedAt || orderData.updated_at),
+        // 计划执行时间：后端是 ScheduleTime，前端期望 schedule_time（格式化）
+        schedule_time: formatDateTime(orderData.ScheduleTime || orderData.schedule_time),
+        // 审核人：解析 JSON 字段，将字符串数组转换为对象数组
+        approver: parseJSONField(orderData.approver, 'pending'),
+        // 复核人：解析 JSON 字段，将字符串数组转换为对象数组
+        reviewer: parseJSONField(orderData.reviewer, 'pending'),
+        // 抄送人：解析 JSON 字段，保持字符串数组格式
+        cc: parseJSONField(orderData.cc, 'pending').map((item: any) => 
+          typeof item === 'object' ? item.user : item
+        ),
+        // 执行人：解析 JSON 字段，保持字符串数组格式
+        executor: parseJSONField(orderData.executor, 'pending').map((item: any) => 
+          typeof item === 'object' ? item.user : item
+        )
+      } as unknown as OrderDetailVO;
+      
+      // 获取任务列表和操作日志（如果后端返回了）
+      if (responseData.tasks) {
+        tasksList.value = responseData.tasks;
+      }
+      if (responseData.logs) {
+        opLogs.value = responseData.logs;
+      }
     }
   } catch (error) {
     console.error('获取工单详情失败:', error);
@@ -949,9 +1120,11 @@ watch(
     if (newStatus === '执行中' && oldStatus !== '执行中' && !websocket.value) {
       initWebSocket();
     }
-    // 如果工单状态变为非执行状态，关闭连接
+    // 如果工单状态变为非执行状态，关闭连接并清空进度信息
     if (newStatus && !['执行中', '已批准'].includes(newStatus) && websocket.value) {
       closeWebSocket();
+      // 清空 gh-ost 进度信息
+      ghostProgress.value = null;
     }
   }
 );
@@ -1080,6 +1253,8 @@ const handleGenerateTasks = async () => {
 const handleExecuteAll = async () => {
   if (!orderDetail.value) return;
   activeTab.value = 'osc-progress';
+  // 在执行任务之前，先建立 WebSocket 连接以接收实时日志
+  initWebSocket(true);
   executeLoading.value = true;
   try {
     // 如果没有任务，先自动生成任务
@@ -1093,8 +1268,9 @@ const handleExecuteAll = async () => {
     const { data, error } = await fetchExecuteAllTasks({ order_id: orderDetail.value.order_id } as any);
     if (error) return;
 
+    // 从 data.data.message 获取消息
     const msgType = data?.data?.type;
-    const msgContent = data?.message || '已触发全部执行';
+    const msgContent = data?.data?.message || data?.message || '已触发全部执行';
 
     if (msgType === 'error') {
       window.$message?.error(msgContent);
@@ -1114,14 +1290,107 @@ const handleExecuteAll = async () => {
 
 const handleExecuteSingle = async (row: any) => {
   activeTab.value = 'osc-progress';
+  // 在执行任务之前，先建立 WebSocket 连接以接收实时日志
+  initWebSocket(true);
   try {
-    await fetchExecuteSingleTask({ task_id: row.id } as any);
-    window.$message?.success('已触发执行');
+    const res: any = await fetchExecuteSingleTask({ task_id: row.id } as any);
+    // request 的 transformBackendResponse 返回 response.data.data
+    // 所以 res.data 就是 { message: "执行成功", type: "success" }
+    const msgContent = res?.data?.message || '已触发执行';
+    const msgType = res?.data?.type || 'success';
+    
+    if (msgType === 'error') {
+      window.$message?.error(msgContent);
+    } else if (msgType === 'warning') {
+      window.$message?.warning(msgContent);
+    } else {
+      window.$message?.success(msgContent);
+    }
     // 刷新单行状态太麻烦，直接刷新列表
     handleRefresh();
   } catch (e: any) {
     window.$message?.error(e?.message || '执行失败');
   }
+};
+
+// gh-ost 控制处理函数
+const handleGhostControl = async (action: 'throttle' | 'unthrottle' | 'chunk-size') => {
+  if (!orderDetail.value) return;
+
+  // chunk-size 操作需要先验证值（在设置 loading 之前验证，避免 loading 状态异常）
+  if (action === 'chunk-size') {
+    if (!ghostChunkSize.value || ghostChunkSize.value <= 0) {
+      window.$message?.warning('请输入有效的 chunk-size 值（大于 0）');
+      return;
+    }
+  }
+
+  ghostControlLoading.value = true;
+  try {
+    const data: any = {
+      order_id: orderDetail.value.order_id,
+      action
+    };
+
+    if (action === 'chunk-size') {
+      data.value = ghostChunkSize.value;
+    }
+
+    const res: any = await fetchControlGhost(data);
+    
+    // createFlatRequest 返回格式: { data, error, response }
+    // 检查是否有错误（全局拦截器已经处理了 code 检查和错误消息显示）
+    if (res.error) {
+      // 不手动显示错误消息，全局拦截器已经显示过了
+      return;
+    }
+    
+    // 操作成功，根据操作类型更新状态和提示
+    if (action === 'throttle') {
+      ghostThrottled.value = true;
+      window.$message?.success('已暂停执行');
+    } else if (action === 'unthrottle') {
+      ghostThrottled.value = false;
+      window.$message?.success('已恢复执行');
+    } else if (action === 'chunk-size') {
+      window.$message?.success(`速度已调节为 ${ghostChunkSize.value}`);
+    }
+  } catch (e: any) {
+    // createFlatRequest 不会抛出异常，但如果真的发生异常，全局拦截器也会处理
+    // 这里只做兜底处理，不重复显示错误消息
+    console.error('gh-ost 控制异常:', e);
+  } finally {
+    ghostControlLoading.value = false;
+  }
+};
+
+// gh-ost 取消处理函数
+const handleGhostCancel = async () => {
+  if (!orderDetail.value) return;
+
+  dialog.warning({
+    title: '确认取消',
+    content: '确定要取消 gh-ost 执行吗？此操作不可恢复。',
+    positiveText: '确认',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      ghostControlLoading.value = true;
+      try {
+        await fetchControlGhost({
+          order_id: orderDetail.value!.order_id,
+          action: 'panic'
+        });
+        window.$message?.warning('已发送取消命令，gh-ost 将停止执行');
+        // 清空进度信息
+        ghostProgress.value = null;
+        ghostThrottled.value = false;
+      } catch (e: any) {
+        window.$message?.error(e?.message || '操作失败');
+      } finally {
+        ghostControlLoading.value = false;
+      }
+    }
+  });
 };
 
 const hookForm = ref({ order_id: '', title: '', db_type: '', schema: '' });
@@ -1437,12 +1706,7 @@ const submitHook = async () => {
             <!-- 进度信息 -->
             <NCard title="进度信息" size="small" class="mb-16px">
               <div class="progress-info">
-                <div class="progress-item">
-                  <span class="progress-label">当前状态：</span>
-                  <NTag :type="getStatusType">{{ getStatusLabel }}</NTag>
-                </div>
                 <div v-if="taskStats" class="progress-item">
-                  <span class="progress-label">任务进度：</span>
                   <div class="task-stats">
                     <NSpace :size="appStore.isMobile ? 'small' : 'small'" :wrap="appStore.isMobile">
                       <NTag :bordered="false" type="primary" :size="appStore.isMobile ? 'tiny' : 'small'">任务数: {{ taskStats.total }}</NTag>
@@ -1452,6 +1716,88 @@ const submitHook = async () => {
                       <NTag :bordered="false" type="info" :size="appStore.isMobile ? 'tiny' : 'small'">执行中: {{ taskStats.processing }}</NTag>
                       <NTag :bordered="false" type="warning" :size="appStore.isMobile ? 'tiny' : 'small'">已暂停: {{ taskStats.paused }}</NTag>
                     </NSpace>
+                  </div>
+                </div>
+                <!-- gh-ost 执行进度和控制 -->
+                <NDivider v-if="isGhostOrder" style="margin: 12px 0;" />
+                <div v-if="isGhostOrder" class="progress-item">
+                  <div class="ghost-control-header">
+                    <span class="progress-label">gh-ost 执行控制：</span>
+                    <NSpace :size="8" :wrap="appStore.isMobile" style="flex-wrap: wrap;">
+                      <NButton
+                        v-if="!ghostThrottled"
+                        type="warning"
+                        size="small"
+                        :loading="ghostControlLoading"
+                        :disabled="ghostControlLoading"
+                        @click="handleGhostControl('throttle')"
+                      >
+                        暂停
+                      </NButton>
+                      <NButton
+                        v-else
+                        type="primary"
+                        size="small"
+                        :loading="ghostControlLoading"
+                        :disabled="ghostControlLoading"
+                        @click="handleGhostControl('unthrottle')"
+                      >
+                        恢复
+                      </NButton>
+                      <NButton
+                        type="error"
+                        size="small"
+                        :loading="ghostControlLoading"
+                        :disabled="ghostControlLoading"
+                        @click="handleGhostCancel"
+                      >
+                        取消
+                      </NButton>
+                      <div style="display: flex; align-items: center; gap: 4px;">
+                        <NInputNumber
+                          v-model:value="ghostChunkSize"
+                          size="small"
+                          :min="100"
+                          :max="10000"
+                          :step="100"
+                          :disabled="ghostControlLoading"
+                          style="width: 100px"
+                          placeholder="速度"
+                        />
+                        <NButton
+                          type="info"
+                          size="small"
+                          :loading="ghostControlLoading"
+                          :disabled="ghostControlLoading || !ghostChunkSize"
+                          @click="handleGhostControl('chunk-size')"
+                        >
+                          调节速度
+                        </NButton>
+                      </div>
+                    </NSpace>
+                  </div>
+                  <!-- 进度信息显示 -->
+                  <div v-if="displayGhostProgress && displayGhostProgress.percent !== undefined" class="ghost-progress-container">
+                    <div style="margin-bottom: 4px;">
+                      <span style="font-size: 12px; color: #666;">
+                        {{ displayGhostProgress.percent.toFixed(2) }}%
+                        <span v-if="displayGhostProgress.current !== undefined && displayGhostProgress.total !== undefined">
+                          ({{ displayGhostProgress.current }}/{{ displayGhostProgress.total }})
+                        </span>
+                        <span v-if="displayGhostProgress.eta" style="margin-left: 8px; color: #999;">
+                          ETA: {{ displayGhostProgress.eta }}
+                        </span>
+                      </span>
+                    </div>
+                    <NProgress
+                      type="line"
+                      :percentage="displayGhostProgress.percent"
+                      :show-indicator="false"
+                      :border-radius="4"
+                      :fill-border-radius="4"
+                      :status="displayGhostProgress.percent === 100 ? 'success' : 'default'"
+                      :height="appStore.isMobile ? 16 : 20"
+                    />
                   </div>
                 </div>
               </div>
@@ -1885,6 +2231,28 @@ const submitHook = async () => {
 .progress-label {
   font-weight: 500;
   color: var(--text-color-2);
+  white-space: nowrap;
+}
+
+.ghost-control-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .ghost-control-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.ghost-progress-container {
+  width: 100%;
+  padding: 4px 0;
 }
 
 .task-stats {
