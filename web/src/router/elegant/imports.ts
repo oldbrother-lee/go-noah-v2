@@ -31,6 +31,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   das_orders_dml: () => import("@/views/das/orders/dml/index.vue"),
   das_orders_export: () => import("@/views/das/orders/export/index.vue"),
   home: () => import("@/views/home/index.vue"),
+  system_database_environment: () => import("@/views/system/database/environment/index.vue"),
   system_menu: () => import("@/views/system/menu/index.vue"),
   system_permission: () => import("@/views/system/permission/index.vue"),
   system_user: () => import("@/views/system/user/index.vue"),

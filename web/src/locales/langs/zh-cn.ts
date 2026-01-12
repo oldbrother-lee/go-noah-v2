@@ -189,7 +189,9 @@ const local: App.I18n.Schema = {
     system: '系统管理',
     system_menu: '菜单管理',
     system_user: '用户管理',
-    system_permission: '权限管理'
+    system_permission: '权限管理',
+    system_database: '数据库管理',
+    system_database_environment: '环境管理'
   },
   page: {
     manage: {
@@ -322,6 +324,21 @@ const local: App.I18n.Schema = {
           name: '请输入名称',
           path: '请输入路径',
           method: '请选择请求方法'
+        }
+      },
+      database: {
+        title: '数据库管理',
+        environment: {
+          title: '环境管理',
+          name: '环境名称',
+          createdAt: '创建时间',
+          updatedAt: '更新时间',
+          addEnvironment: '新增环境',
+          editEnvironment: '编辑环境',
+          form: {
+            name: '请输入环境名称',
+            nameRequired: '环境名称不能为空'
+          }
         }
       }
     },

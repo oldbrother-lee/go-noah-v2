@@ -189,7 +189,9 @@ const local: App.I18n.Schema = {
     system: 'System Management',
     system_menu: 'Menu Management',
     system_user: 'User Management',
-    system_permission: 'Permission Management'
+    system_permission: 'Permission Management',
+    system_database: 'Database Management',
+    system_database_environment: 'Environment Management'
   },
   page: {
     login: {
@@ -397,6 +399,21 @@ const local: App.I18n.Schema = {
           name: 'Please enter name',
           path: 'Please enter path',
           method: 'Please select method'
+        }
+      },
+      database: {
+        title: 'Database Management',
+        environment: {
+          title: 'Environment Management',
+          name: 'Environment Name',
+          createdAt: 'Created At',
+          updatedAt: 'Updated At',
+          addEnvironment: 'Add Environment',
+          editEnvironment: 'Edit Environment',
+          form: {
+            name: 'Please enter environment name',
+            nameRequired: 'Environment name cannot be empty'
+          }
         }
       }
     }

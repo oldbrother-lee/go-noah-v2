@@ -161,6 +161,22 @@ declare namespace Api {
       role: string;
       list: string[]; // 格式: "menu:/path" 或 "api:/path,GET"
     }
+
+    // 环境管理相关
+    interface Environment {
+      id: number;
+      name: string;
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    interface EnvironmentCreateRequest {
+      name: string;
+    }
+
+    interface EnvironmentUpdateRequest {
+      name: string;
+    }
   }
 }
 

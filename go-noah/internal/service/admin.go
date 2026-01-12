@@ -935,19 +935,64 @@ func (s *AdminService) convertMenuToElegantRoute(menu *model.Menu, menuMap map[u
 
 	// 智能生成 component
 	component := menu.Component
-	if component == "" || !strings.Contains(component, ".") {
-		if menu.ParentID == 0 {
-			// 顶级菜单
-			if hasChildren {
-				// 有子菜单，只需要 layout
-				component = "layout.base"
-			} else {
-				// 没有子菜单，一级页面
-				component = "layout.base$view." + routeName
+
+	// 如果有子菜单，强制使用 layout（有子菜单的父路由必须使用 layout，不能使用 view）
+	if hasChildren {
+		// 从 component 中提取 layout（如果 component 是 layout.xxx 格式）
+		if strings.HasPrefix(component, "layout.") {
+			// 如果已经是 layout 格式，保持原样（可能是 layout.base 或 layout.blank）
+			layoutParts := strings.Split(component, "$")
+			if len(layoutParts) > 0 {
+				component = layoutParts[0] // 只保留 layout 部分，去掉 $view.xxx
 			}
 		} else {
-			// 子菜单，使用 view.{routeName} 格式
-			component = "view." + routeName
+			// 如果不是 layout 格式，默认使用 layout.base
+			component = "layout.base"
+		}
+	} else {
+		// 没有子菜单
+		if menu.ParentID == 0 {
+			// 顶级菜单
+			if component == "" || !strings.Contains(component, ".") {
+				// 一级页面
+				component = "layout.base$view." + routeName
+			} else if strings.HasPrefix(component, "view.") {
+				// 如果存储的是 view.xxx 格式，需要转换为 layout.base$view.xxx
+				component = "layout.base$" + component
+			} else if !strings.Contains(component, "$") && strings.HasPrefix(component, "layout.") {
+				// 如果只有 layout，需要添加 view
+				component = component + "$view." + routeName
+			}
+		} else {
+			// 子菜单，必须使用 view.xxx 格式，不能包含 layout
+			if component == "" || !strings.Contains(component, ".") {
+				component = "view." + routeName
+			} else {
+				// 如果 component 包含 $，提取 view 部分
+				if strings.Contains(component, "$") {
+					// 提取 $view.xxx 部分
+					parts := strings.Split(component, "$")
+					foundView := false
+					for _, part := range parts {
+						if strings.HasPrefix(part, "view.") {
+							component = part
+							foundView = true
+							break
+						}
+					}
+					// 如果没找到 view 部分，使用默认格式
+					if !foundView {
+						component = "view." + routeName
+					}
+				} else if strings.HasPrefix(component, "layout.") {
+					// 如果是 layout.xxx 格式（错误），转换为 view.xxx
+					component = "view." + routeName
+				} else if !strings.HasPrefix(component, "view.") {
+					// 如果既不是 layout 也不是 view，默认使用 view
+					component = "view." + routeName
+				}
+				// 如果已经是 view.xxx 格式，保持不变
+			}
 		}
 	}
 

@@ -217,6 +217,30 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'system_database',
+        path: '/system/database',
+        component: 'layout.base',
+        meta: {
+          title: 'system_database',
+          i18nKey: 'route.system_database',
+          icon: 'mdi:database-cog',
+          order: 1
+        },
+        children: [
+          {
+            name: 'system_database_environment',
+            path: '/system/database/environment',
+            component: 'view.system_database_environment',
+            meta: {
+              title: 'system_database_environment',
+              i18nKey: 'route.system_database_environment',
+              icon: 'mdi:server-network',
+              order: 1
+            }
+          }
+        ]
+      },
+      {
         name: 'system_menu',
         path: '/system/menu',
         component: 'view.system_menu',

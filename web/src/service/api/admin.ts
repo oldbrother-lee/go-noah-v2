@@ -289,3 +289,47 @@ export function fetchUpdateRolePermission(data: Api.Admin.UpdateRolePermissionRe
   });
 }
 
+// ==================== Environment Management ====================
+
+/**
+ * Get environments list
+ */
+export function fetchGetEnvironments() {
+  return request<Api.Admin.Environment[]>({
+    url: '/api/v1/insight/environments',
+    method: 'get'
+  });
+}
+
+/**
+ * Create environment
+ */
+export function fetchCreateEnvironment(data: Api.Admin.EnvironmentCreateRequest) {
+  return request<Api.Admin.Environment>({
+    url: '/api/v1/insight/environments',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * Update environment
+ */
+export function fetchUpdateEnvironment(id: number, data: Api.Admin.EnvironmentUpdateRequest) {
+  return request<Api.Admin.Environment>({
+    url: `/api/v1/insight/environments/${id}`,
+    method: 'put',
+    data
+  });
+}
+
+/**
+ * Delete environment
+ */
+export function fetchDeleteEnvironment(id: number) {
+  return request({
+    url: `/api/v1/insight/environments/${id}`,
+    method: 'delete'
+  });
+}
+

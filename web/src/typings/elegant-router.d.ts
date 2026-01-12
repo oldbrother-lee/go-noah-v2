@@ -35,6 +35,8 @@ declare module "@elegant-router/types" {
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
     "system": "/system";
+    "system_database": "/system/database";
+    "system_database_environment": "/system/database/environment";
     "system_menu": "/system/menu";
     "system_permission": "/system/permission";
     "system_user": "/system/user";
@@ -109,6 +111,7 @@ declare module "@elegant-router/types" {
     | "das_orders_dml"
     | "das_orders_export"
     | "home"
+    | "system_database_environment"
     | "system_menu"
     | "system_permission"
     | "system_user"

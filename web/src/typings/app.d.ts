@@ -578,6 +578,21 @@ declare namespace App {
               method: string;
             };
           };
+          database: {
+            title: string;
+            environment: {
+              title: string;
+              name: string;
+              createdAt: string;
+              updatedAt: string;
+              addEnvironment: string;
+              editEnvironment: string;
+              form: {
+                name: string;
+                nameRequired: string;
+              };
+            };
+          };
         };
         home: {
           branchDesc: string;

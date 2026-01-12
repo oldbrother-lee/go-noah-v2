@@ -92,7 +92,7 @@ function createDefaultModel(): Model {
     routePath: '',
     pathParam: '',
     component: '',
-    layout: '',
+    layout: 'base', // 默认使用 base 布局
     page: '',
     i18nKey: null,
     icon: '',
@@ -167,18 +167,32 @@ const layoutOptions: CommonType.Option[] = [
 function handleInitModel() {
   model.value = createDefaultModel();
 
-  if (!props.rowData) return;
+  if (!props.rowData) {
+    // 新建顶级菜单时，确保 layout 有默认值
+    if (model.value.parentId === 0 && !model.value.layout) {
+      model.value.layout = 'base';
+    }
+    if (!model.value.query) {
+      model.value.query = [];
+    }
+    if (!model.value.buttons) {
+      model.value.buttons = [];
+    }
+    return;
+  }
 
   if (props.operateType === 'addChild') {
     const { id } = props.rowData;
     Object.assign(model.value, { parentId: id });
+    // 子菜单继承父菜单的布局，不需要设置 layout（由 showLayout 控制显示）
+    model.value.layout = '';
   }
 
   if (props.operateType === 'edit') {
     const { component, ...rest } = props.rowData;
     const { layout, page } = getLayoutAndPage(component);
     const { path, param } = getPathParamFromRoutePath(rest.routePath);
-    Object.assign(model.value, rest, { layout, page, routePath: path, pathParam: param });
+    Object.assign(model.value, rest, { layout: layout || 'base', page, routePath: path, pathParam: param });
   }
 
   if (!model.value.query) {
@@ -219,7 +233,14 @@ function handleCreateButton() {
 
 function getSubmitParams() {
   const { layout, page, pathParam, ...params } = model.value;
-  const component = transformLayoutAndPageToComponent(layout, page);
+  
+  // 对于顶级菜单（parentId === 0），确保有布局
+  let finalLayout = layout;
+  if (model.value.parentId === 0 && !finalLayout) {
+    finalLayout = 'base'; // 默认使用 base 布局
+  }
+  
+  const component = transformLayoutAndPageToComponent(finalLayout, page);
   const routePath = getRoutePathWithParam(model.value.routePath, pathParam);
   params.component = component;
   params.routePath = routePath;
