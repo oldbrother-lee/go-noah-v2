@@ -177,6 +177,47 @@ declare namespace Api {
     interface EnvironmentUpdateRequest {
       name: string;
     }
+
+    // 数据库配置管理相关
+    interface DBConfig {
+      id: number;
+      instance_id: string;
+      hostname: string;
+      port: number;
+      user_name: string;
+      password: string;
+      use_type: string;
+      db_type: string;
+      environment: number | null;
+      organization_key: string;
+      remark: string;
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    interface DBConfigCreateRequest {
+      hostname: string;
+      port: number;
+      user_name: string;
+      password: string;
+      use_type: string;
+      db_type: string;
+      environment?: number;
+      organization_key?: string;
+      remark?: string;
+    }
+
+    interface DBConfigUpdateRequest {
+      hostname?: string;
+      port?: number;
+      user_name?: string;
+      password?: string;
+      use_type?: string;
+      db_type?: string;
+      environment?: number;
+      organization_key?: string;
+      remark?: string;
+    }
   }
 }
 

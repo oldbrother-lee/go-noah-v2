@@ -26,8 +26,8 @@ type AdminUserDataItem struct {
 type GetAdminUsersRequest struct {
 	Page     int    `form:"page" binding:"required" example:"1"`
 	PageSize int    `form:"pageSize" binding:"required" example:"10"`
-	Username string `json:"username" binding:"" example:"张三"`
-	Nickname string `json:"nickname" binding:"" example:"小Baby"`
+	Username string `form:"username" binding:"" example:"张三"`
+	Nickname string `form:"nickname" binding:"" example:"小Baby"`
 	Phone    string `form:"phone" binding:"" example:"1858888888"`
 	Email    string `form:"email" binding:"" example:"1234@gmail.com"`
 }

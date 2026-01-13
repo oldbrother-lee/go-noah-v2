@@ -182,7 +182,12 @@ const routeMap: RouteMap = {
   "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?",
   "system": "/system",
   "system_database": "/system/database",
+  "system_database_config": "/system/database/config",
   "system_database_environment": "/system/database/environment",
+  "system_database_permission": "/system/database/permission",
+  "system_database_permission_role": "/system/database/permission/role",
+  "system_database_permission_template": "/system/database/permission/template",
+  "system_database_permission_user": "/system/database/permission/user",
   "system_menu": "/system/menu",
   "system_permission": "/system/permission",
   "system_user": "/system/user"

@@ -84,6 +84,38 @@ export function fetchUserGrants(params?: Record<string, any>) {
 }
 
 /**
+ * Get user permissions (schema and table)
+ */
+export function fetchGetUserPermissions(username: string) {
+  return request<Api.Das.UserPermissionsResponse>({
+    url: '/api/v1/insight/das/permissions',
+    method: 'get',
+    params: { username }
+  });
+}
+
+/**
+ * Grant schema permission
+ */
+export function fetchGrantSchemaPermission(data: Api.Das.GrantSchemaPermissionRequest) {
+  return request<Api.Das.SchemaPermission>({
+    url: '/api/v1/insight/das/permissions/schema',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * Revoke schema permission
+ */
+export function fetchRevokeSchemaPermission(id: number) {
+  return request({
+    url: `/api/v1/insight/das/permissions/schema/${id}`,
+    method: 'delete'
+  });
+}
+
+/**
  * Get database dictionary (table info with columns)
  */
 export function fetchDBDict(params?: Record<string, any>) {
@@ -251,5 +283,103 @@ export function fetchAdminTablesList(params?: Record<string, any>) {
   return request<Api.Das.Table[]>({
     url: `/api/v1/insight/das/tables/${params?.instance_id}/${params?.schema}`,
     method: 'get'
+  });
+}
+
+// ==================== 权限模板管理 ====================
+
+/**
+ * Get permission templates
+ */
+export function fetchGetPermissionTemplates() {
+  return request<Api.Das.PermissionTemplate[]>({
+    url: '/api/v1/insight/das/permissions/templates',
+    method: 'get'
+  });
+}
+
+/**
+ * Get permission template by ID
+ */
+export function fetchGetPermissionTemplate(id: number) {
+  return request<Api.Das.PermissionTemplate>({
+    url: `/api/v1/insight/das/permissions/templates/${id}`,
+    method: 'get'
+  });
+}
+
+/**
+ * Create permission template
+ */
+export function fetchCreatePermissionTemplate(data: Api.Das.PermissionTemplateCreateRequest) {
+  return request<Api.Das.PermissionTemplate>({
+    url: '/api/v1/insight/das/permissions/templates',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * Update permission template
+ */
+export function fetchUpdatePermissionTemplate(id: number, data: Api.Das.PermissionTemplateUpdateRequest) {
+  return request<Api.Das.PermissionTemplate>({
+    url: `/api/v1/insight/das/permissions/templates/${id}`,
+    method: 'put',
+    data
+  });
+}
+
+/**
+ * Delete permission template
+ */
+export function fetchDeletePermissionTemplate(id: number) {
+  return request({
+    url: `/api/v1/insight/das/permissions/templates/${id}`,
+    method: 'delete'
+  });
+}
+
+// ==================== 角色权限管理 ====================
+
+/**
+ * Get role permissions
+ */
+export function fetchGetRolePermissions(role: string) {
+  return request<Api.Das.RolePermission[]>({
+    url: `/api/v1/insight/das/permissions/roles/${role}`,
+    method: 'get'
+  });
+}
+
+/**
+ * Create role permission
+ */
+export function fetchCreateRolePermission(data: Api.Das.RolePermissionCreateRequest) {
+  return request<Api.Das.RolePermission>({
+    url: '/api/v1/insight/das/permissions/roles',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * Delete role permission
+ */
+export function fetchDeleteRolePermission(id: number) {
+  return request({
+    url: `/api/v1/insight/das/permissions/roles/${id}`,
+    method: 'delete'
+  });
+}
+
+/**
+ * Get user effective permissions
+ */
+export function fetchGetUserEffectivePermissions(username: string) {
+  return request<Api.Das.PermissionObject[]>({
+    url: '/api/v1/insight/das/permissions/users',
+    method: 'get',
+    params: { username }
   });
 }

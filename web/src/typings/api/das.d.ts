@@ -105,6 +105,38 @@ declare namespace Api {
       sqltext: string;
     }
 
+    interface SchemaPermission {
+      id: number;
+      username: string;
+      schema: string;
+      instance_id: string;
+      created_at: string;
+      updated_at: string;
+    }
+
+    interface TablePermission {
+      id: number;
+      username: string;
+      schema: string;
+      table: string;
+      instance_id: string;
+      rule: 'allow' | 'deny';
+      created_at: string;
+      updated_at: string;
+    }
+
+    interface UserPermissionsResponse {
+      schema_permissions: SchemaPermission[];
+      table_permissions: TablePermission[];
+    }
+
+    interface GrantSchemaPermissionRequest {
+      username: string;
+      instance_id: string;
+      schema: string;
+    }
+
+    // 保留旧的类型定义以兼容现有代码
     interface SchemaGrant {
       id: number;
       userId: number;
@@ -142,6 +174,62 @@ declare namespace Api {
       port: number;
       dbType: string;
       environment: string;
+    }
+
+    // ==================== 权限模板 ====================
+    interface PermissionObject {
+      instance_id: string;
+      schema: string;
+      table?: string;
+    }
+
+    interface PermissionTemplate {
+      id: number;
+      name: string;
+      description: string;
+      permissions: PermissionObject[];
+      created_at: string;
+      updated_at: string;
+    }
+
+    interface PermissionTemplateCreateRequest {
+      name: string;
+      description?: string;
+      permissions: PermissionObject[];
+    }
+
+    interface PermissionTemplateUpdateRequest {
+      name: string;
+      description?: string;
+      permissions: PermissionObject[];
+    }
+
+    // ==================== 权限组 ====================
+    interface DatabaseObject {
+      instance_id: string;
+      schema: string;
+    }
+
+    // ==================== 角色权限 ====================
+    interface RolePermission {
+      id: number;
+      role: string;
+      permission_type: 'object' | 'template';
+      permission_id: number;
+      instance_id?: string;
+      schema?: string;
+      table?: string;
+      created_at: string;
+      updated_at: string;
+    }
+
+    interface RolePermissionCreateRequest {
+      role: string;
+      permission_type: 'object' | 'template';
+      permission_id: number;
+      instance_id?: string;
+      schema?: string;
+      table?: string;
     }
   }
 }

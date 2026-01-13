@@ -228,6 +228,17 @@ export const generatedRoutes: GeneratedRoute[] = [
         },
         children: [
           {
+            name: 'system_database_config',
+            path: '/system/database/config',
+            component: 'view.system_database_config',
+            meta: {
+              title: 'system_database_config',
+              i18nKey: 'route.system_database_config',
+              icon: 'mdi:database-settings',
+              order: 2
+            }
+          },
+          {
             name: 'system_database_environment',
             path: '/system/database/environment',
             component: 'view.system_database_environment',
@@ -237,6 +248,48 @@ export const generatedRoutes: GeneratedRoute[] = [
               icon: 'mdi:server-network',
               order: 1
             }
+          },
+          {
+            name: 'system_database_permission',
+            path: '/system/database/permission',
+            component: 'layout.base',
+            meta: {
+              title: 'system_database_permission',
+              i18nKey: 'route.system_database_permission',
+              icon: 'mdi:shield-account',
+              order: 3
+            },
+            children: [
+              {
+                name: 'system_database_permission_role',
+                path: '/system/database/permission/role',
+                component: 'view.system_database_permission_role',
+                meta: {
+                  title: 'system_database_permission_role',
+                  i18nKey: 'route.system_database_permission_role'
+                }
+              },
+              {
+                name: 'system_database_permission_template',
+                path: '/system/database/permission/template',
+                component: 'view.system_database_permission_template',
+                meta: {
+                  title: 'system_database_permission_template',
+                  i18nKey: 'route.system_database_permission_template'
+                }
+              },
+              {
+                name: 'system_database_permission_user',
+                path: '/system/database/permission/user',
+                component: 'view.system_database_permission_user',
+                meta: {
+                  title: 'system_database_permission_user',
+                  i18nKey: 'route.system_database_permission_user',
+                  icon: 'mdi:account-key',
+                  order: 1
+                }
+              }
+            ]
           }
         ]
       },

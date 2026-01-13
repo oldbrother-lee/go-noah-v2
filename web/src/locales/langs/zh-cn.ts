@@ -191,7 +191,12 @@ const local: App.I18n.Schema = {
     system_user: '用户管理',
     system_permission: '权限管理',
     system_database: '数据库管理',
-    system_database_environment: '环境管理'
+    system_database_config: '数据库配置',
+    system_database_environment: '环境管理',
+    system_database_permission: '权限管理',
+    system_database_permission_user: '用户权限',
+    system_database_permission_template: '权限模板',
+    system_database_permission_role: '角色权限'
   },
   page: {
     manage: {
@@ -338,6 +343,81 @@ const local: App.I18n.Schema = {
           form: {
             name: '请输入环境名称',
             nameRequired: '环境名称不能为空'
+          }
+        },
+        config: {
+          title: '数据库配置',
+          instanceId: '实例ID',
+          hostname: '主机名',
+          port: '端口',
+          userName: '用户名',
+          password: '密码',
+          useType: '用途',
+          dbType: '数据库类型',
+          environment: '环境',
+          organizationKey: '组织架构',
+          remark: '备注',
+          createdAt: '创建时间',
+          updatedAt: '更新时间',
+          addConfig: '新增数据库配置',
+          editConfig: '编辑数据库配置',
+          form: {
+            hostname: '请输入主机名',
+            port: '请输入端口',
+            userName: '请输入用户名',
+            password: '请输入密码',
+            useType: '请选择用途',
+            dbType: '请选择数据库类型',
+            environment: '请选择环境',
+            organizationKey: '请输入组织架构',
+            remark: '请输入备注'
+          }
+        },
+        permission: {
+          title: '数据库权限',
+          username: '用户名',
+          instanceId: '实例ID',
+          schema: '库名',
+          createdAt: '创建时间',
+          updatedAt: '更新时间',
+          addPermission: '新增权限',
+          selectUser: '选择用户',
+          selectUserFirst: '请先选择用户',
+          pleaseSelectUser: '请选择用户',
+          form: {
+            instanceId: '请选择实例',
+            schema: '请选择库名'
+          }
+        },
+        permissionTemplate: {
+          title: '权限模板',
+          name: '模板名称',
+          description: '模板描述',
+          permissions: '权限数量',
+          createdAt: '创建时间',
+          updatedAt: '更新时间',
+          addTemplate: '新增模板',
+          editTemplate: '编辑模板',
+          form: {
+            name: '请输入模板名称',
+            description: '请输入模板描述'
+          }
+        },
+        rolePermission: {
+          title: '角色权限',
+          role: '角色',
+          permissionType: '权限类型',
+          permissionId: '权限ID',
+          instanceId: '实例ID',
+          schema: '库名',
+          table: '表名',
+          createdAt: '创建时间',
+          form: {
+            role: '请选择角色',
+            permissionType: '请选择权限类型',
+            permissionId: '请选择权限模板',
+            instanceId: '请选择实例',
+            schema: '请选择库名'
           }
         }
       }

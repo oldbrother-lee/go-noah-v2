@@ -73,6 +73,9 @@ func (m *MigrateServer) Start(ctx context.Context) error {
 		&insight.DASAllowedOperation{},
 		&insight.DASRecord{},
 		&insight.DASFavorite{},
+		// 新增: 权限管理
+		&insight.DASPermissionTemplate{},
+		&insight.DASRolePermission{},
 		&insight.OrderRecord{},
 		&insight.OrderTask{},
 		&insight.OrderOpLog{},
@@ -125,6 +128,50 @@ func (m *MigrateServer) Start(ctx context.Context) error {
 
 	m.log.Info("AutoMigrate success")
 	os.Exit(0)
+	return nil
+}
+
+// AutoMigrateTables 自动迁移数据库表（服务器启动时调用）
+func AutoMigrateTables(db *gorm.DB, logger *log.Logger) error {
+	if err := db.AutoMigrate(
+		&model.AdminUser{},
+		&model.Menu{},
+		&model.Role{},
+		&model.Api{},
+		// 新增: 部门管理
+		&model.Department{},
+		&model.RoleDepartment{},
+		// 新增: 审批流程
+		&model.FlowDefinition{},
+		&model.FlowNode{},
+		&model.FlowInstance{},
+		&model.FlowTask{},
+		&model.FlowLog{},
+		&model.FlowCC{},
+		// goInsight 功能表
+		&insight.DBEnvironment{},
+		&insight.DBConfig{},
+		&insight.DBSchema{},
+		&insight.Organization{},
+		&insight.OrganizationUser{},
+		&insight.DASUserSchemaPermission{},
+		&insight.DASUserTablePermission{},
+		&insight.DASAllowedOperation{},
+		&insight.DASRecord{},
+		&insight.DASFavorite{},
+		// 新增: 权限管理
+		&insight.DASPermissionTemplate{},
+		&insight.DASRolePermission{},
+		&insight.OrderRecord{},
+		&insight.OrderTask{},
+		&insight.OrderOpLog{},
+		&insight.OrderMessage{},
+		&insight.InspectParams{},
+	); err != nil {
+		logger.Error("AutoMigrate tables error", zap.Error(err))
+		return err
+	}
+	logger.Info("AutoMigrate tables success")
 	return nil
 }
 func (m *MigrateServer) Stop(ctx context.Context) error {

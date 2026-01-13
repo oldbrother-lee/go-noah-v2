@@ -26,6 +26,12 @@ func NewServerApp(conf *viper.Viper, logger *log.Logger) (*app.App, func(), erro
 	global.Logger = logger
 	global.Conf = conf
 
+	// 自动迁移数据库表（创建不存在的表）
+	if err := server.AutoMigrateTables(global.DB, logger); err != nil {
+		logger.Error("自动迁移数据库表失败", zap.Error(err))
+		// 不阻止服务启动，只记录错误
+	}
+
 	// 初始化审核参数（如果不存在则自动初始化）
 	if err := server.InitializeInspectParamsIfNeeded(global.DB, logger); err != nil {
 		logger.Error("初始化审核参数失败", zap.Error(err))

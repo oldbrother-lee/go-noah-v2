@@ -191,7 +191,12 @@ const local: App.I18n.Schema = {
     system_user: 'User Management',
     system_permission: 'Permission Management',
     system_database: 'Database Management',
-    system_database_environment: 'Environment Management'
+    system_database_config: 'Database Configuration',
+    system_database_environment: 'Environment Management',
+    system_database_permission: 'Permission Management',
+    system_database_permission_user: 'User Permission',
+    system_database_permission_template: 'Permission Template',
+    system_database_permission_role: 'Role Permission'
   },
   page: {
     login: {
@@ -413,6 +418,81 @@ const local: App.I18n.Schema = {
           form: {
             name: 'Please enter environment name',
             nameRequired: 'Environment name cannot be empty'
+          }
+        },
+        config: {
+          title: 'Database Configuration',
+          instanceId: 'Instance ID',
+          hostname: 'Hostname',
+          port: 'Port',
+          userName: 'Username',
+          password: 'Password',
+          useType: 'Use Type',
+          dbType: 'Database Type',
+          environment: 'Environment',
+          organizationKey: 'Organization',
+          remark: 'Remark',
+          createdAt: 'Created At',
+          updatedAt: 'Updated At',
+          addConfig: 'Add Database Config',
+          editConfig: 'Edit Database Config',
+          form: {
+            hostname: 'Please enter hostname',
+            port: 'Please enter port',
+            userName: 'Please enter username',
+            password: 'Please enter password',
+            useType: 'Please select use type',
+            dbType: 'Please select database type',
+            environment: 'Please select environment',
+            organizationKey: 'Please enter organization',
+            remark: 'Please enter remark'
+          }
+        },
+        permission: {
+          title: 'Database Permission',
+          username: 'Username',
+          instanceId: 'Instance ID',
+          schema: 'Schema',
+          createdAt: 'Created At',
+          updatedAt: 'Updated At',
+          addPermission: 'Add Permission',
+          selectUser: 'Select User',
+          selectUserFirst: 'Please select a user first',
+          pleaseSelectUser: 'Please select a user',
+          form: {
+            instanceId: 'Please select instance',
+            schema: 'Please select schema'
+          }
+        },
+        permissionTemplate: {
+          title: 'Permission Template',
+          name: 'Template Name',
+          description: 'Template Description',
+          permissions: 'Permission Count',
+          createdAt: 'Created At',
+          updatedAt: 'Updated At',
+          addTemplate: 'Add Template',
+          editTemplate: 'Edit Template',
+          form: {
+            name: 'Please enter template name',
+            description: 'Please enter template description'
+          }
+        },
+        rolePermission: {
+          title: 'Role Permission',
+          role: 'Role',
+          permissionType: 'Permission Type',
+          permissionId: 'Permission ID',
+          instanceId: 'Instance ID',
+          schema: 'Schema',
+          table: 'Table',
+          createdAt: 'Created At',
+          form: {
+            role: 'Please select role',
+            permissionType: 'Please select permission type',
+            permissionId: 'Please select template',
+            instanceId: 'Please select instance',
+            schema: 'Please select schema'
           }
         }
       }

@@ -18,29 +18,76 @@ const { bool: visible, setTrue: openModal } = useBoolean();
 
 const wrapperRef = ref<HTMLElement | null>(null);
 
+// 将扁平菜单数据转换为树形结构
+function buildMenuTree(menus: any[]): (Api.SystemManage.Menu & { children?: Api.SystemManage.Menu[] })[] {
+  const map = new Map<number, Api.SystemManage.Menu & { children?: Api.SystemManage.Menu[] }>();
+  const tree: (Api.SystemManage.Menu & { children?: Api.SystemManage.Menu[] })[] = [];
+
+  // 第一遍：创建所有节点的映射，统一处理 ID 字段
+  menus.forEach((menu: any) => {
+    const menuId = menu.ID || menu.id;
+    const normalizedMenu = {
+      ...menu,
+      id: menuId,
+      parentId: menu.parentId || menu.parent_id || 0
+    };
+    map.set(menuId, {
+      ...normalizedMenu,
+      children: []
+    });
+  });
+
+  // 第二遍：构建树形结构
+  menus.forEach((menu: any) => {
+    const menuId = menu.ID || menu.id;
+    const node = map.get(menuId)!;
+    const parentId = menu.parentId || menu.parent_id || 0;
+    
+    if (parentId && map.has(parentId)) {
+      const parent = map.get(parentId)!;
+      if (!parent.children) {
+        parent.children = [];
+      }
+      parent.children.push(node);
+    } else {
+      tree.push(node);
+    }
+  });
+
+  // 按 order 排序
+  const sortByOrder = (nodes: (Api.SystemManage.Menu & { children?: Api.SystemManage.Menu[] })[]) => {
+    nodes.sort((a, b) => (a.order || 0) - (b.order || 0));
+    nodes.forEach(node => {
+      if (node.children && node.children.length > 0) {
+        sortByOrder(node.children);
+      }
+    });
+  };
+  sortByOrder(tree);
+
+  return tree;
+}
+
 // 使用useTable hook
 const { columns, columnChecks, data, loading, pagination, getData, getDataByPage } = useTable({
   apiFn: fetchGetMenuList,
   transformer: res => {
     const { data: responseData } = res;
     if (responseData && responseData.records) {
-      const { records = [], current = 1, size = 10, total = 0 } = responseData;
-      const pageSize = size <= 0 ? 10 : size;
-      const recordsWithIndex = records.map((item: any, index: number) => ({
-        ...item,
-        index: (current - 1) * pageSize + index + 1
-      }));
+      const { records = [] } = responseData;
+      // 转换为树形结构
+      const treeData = buildMenuTree(records);
       return {
-        data: recordsWithIndex,
-        pageNum: current,
-        pageSize,
-        total
+        data: treeData,
+        pageNum: 1,
+        pageSize: treeData.length,
+        total: treeData.length
       };
     }
     return {
       data: [],
       pageNum: 1,
-      pageSize: 10,
+      pageSize: 0,
       total: 0
     };
   },
@@ -53,7 +100,13 @@ const { columns, columnChecks, data, loading, pagination, getData, getDataByPage
     {
       key: 'id',
       title: $t('page.manage.menu.id'),
-      align: 'center'
+      align: 'center',
+      width: 100,
+      render: (row: Api.SystemManage.Menu) => {
+        const hasChildren = row.children && row.children.length > 0;
+        // 这里不显示展开/折叠图标，因为 NDataTable 会自动处理
+        return <span>{row.id}</span>;
+      }
     },
     {
       key: 'menuType',
@@ -256,8 +309,8 @@ const allPages = ref<string[]>([]);
         :scroll-x="1088"
         :loading="loading"
         :row-key="row => row.id"
-        remote
-        :pagination="pagination"
+        :default-expand-all="false"
+        :pagination="false"
         class="sm:h-full"
       />
       <MenuOperateModal
@@ -265,7 +318,7 @@ const allPages = ref<string[]>([]);
         :operate-type="operateType"
         :row-data="editingData"
         :all-pages="allPages"
-        @submitted="getDataByPage"
+        @submitted="getData"
       />
     </NCard>
   </div>

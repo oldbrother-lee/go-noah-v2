@@ -80,6 +80,33 @@ export function setupElegantRouter() {
         meta.order = 3;
       }
 
+      // 数据库管理菜单配置
+      if (key === 'system_database') {
+        meta.icon = 'mdi:database-cog';
+        meta.order = 1;
+      }
+      if (key === 'system_database_environment') {
+        meta.icon = 'mdi:server-network';
+        meta.order = 1;
+      }
+      if (key === 'system_database_config') {
+        meta.icon = 'mdi:database-settings';
+        meta.order = 2;
+      }
+      // 权限管理相关菜单配置
+      if (key === 'system_database_permission') {
+        meta.icon = 'mdi:shield-account';
+        meta.order = 3;
+      }
+      // 隐藏权限相关的子菜单，因为它们会作为权限管理的子菜单显示
+      if (
+        key === 'system_database_permission-group' ||
+        key === 'system_database_permission-template' ||
+        key === 'system_database_role-permission'
+      ) {
+        meta.hideInMenu = true;
+      }
+
       return meta;
     }
   });

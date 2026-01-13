@@ -333,3 +333,58 @@ export function fetchDeleteEnvironment(id: number) {
   });
 }
 
+// ==================== Database Config Management ====================
+
+/**
+ * Get database configs list
+ */
+export function fetchGetDBConfigs(params?: { useType?: string; environment?: number }) {
+  return request<Api.Admin.DBConfig[]>({
+    url: '/api/v1/insight/dbconfigs',
+    method: 'get',
+    params
+  });
+}
+
+/**
+ * Get database config by instance ID
+ */
+export function fetchGetDBConfig(instanceId: string) {
+  return request<Api.Admin.DBConfig>({
+    url: `/api/v1/insight/dbconfigs/${instanceId}`,
+    method: 'get'
+  });
+}
+
+/**
+ * Create database config
+ */
+export function fetchCreateDBConfig(data: Api.Admin.DBConfigCreateRequest) {
+  return request<Api.Admin.DBConfig>({
+    url: '/api/v1/insight/dbconfigs',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * Update database config
+ */
+export function fetchUpdateDBConfig(id: number, data: Api.Admin.DBConfigUpdateRequest) {
+  return request<Api.Admin.DBConfig>({
+    url: `/api/v1/insight/dbconfigs/${id}`,
+    method: 'put',
+    data
+  });
+}
+
+/**
+ * Delete database config
+ */
+export function fetchDeleteDBConfig(id: number) {
+  return request({
+    url: `/api/v1/insight/dbconfigs/${id}`,
+    method: 'delete'
+  });
+}
+

@@ -592,6 +592,81 @@ declare namespace App {
                 nameRequired: string;
               };
             };
+            config: {
+              title: string;
+              instanceId: string;
+              hostname: string;
+              port: string;
+              userName: string;
+              password: string;
+              useType: string;
+              dbType: string;
+              environment: string;
+              organizationKey: string;
+              remark: string;
+              createdAt: string;
+              updatedAt: string;
+              addConfig: string;
+              editConfig: string;
+              form: {
+                hostname: string;
+                port: string;
+                userName: string;
+                password: string;
+                useType: string;
+                dbType: string;
+                environment: string;
+                organizationKey: string;
+                remark: string;
+              };
+            };
+          permission: {
+            title: string;
+            username: string;
+            instanceId: string;
+            schema: string;
+            createdAt: string;
+            updatedAt: string;
+            addPermission: string;
+            selectUser: string;
+            selectUserFirst: string;
+            pleaseSelectUser: string;
+            form: {
+              instanceId: string;
+              schema: string;
+            };
+          };
+          permissionTemplate: {
+            title: string;
+            name: string;
+            description: string;
+            permissions: string;
+            createdAt: string;
+            updatedAt: string;
+            addTemplate: string;
+            editTemplate: string;
+            form: {
+              name: string;
+              description: string;
+            };
+          };
+          rolePermission: {
+            title: string;
+            role: string;
+            permissionType: string;
+            permissionId: string;
+            instanceId: string;
+            schema: string;
+            table: string;
+            createdAt: string;
+            form: {
+              role: string;
+              permissionType: string;
+              permissionId: string;
+              instanceId: string;
+              schema: string;
+            };
+          };
           };
         };
         home: {
